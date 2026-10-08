@@ -274,6 +274,9 @@ export default function Home() {
                 <span className="mapBadge">
                   {track.flag} / {track.name}赛道
                 </span>
+                <div className="heroMapLegend">
+                  <i className="innerDot" /> 绿线侧为内圈（赛车线侧，同格优先）
+                </div>
               </div>
               <div className="featureRow">
                 <span>↗ 2–6 位车手</span>
@@ -438,7 +441,9 @@ export default function Home() {
                   <span>
                     <i className="cornerDot" /> 黄线处检查弯道限速
                   </span>
-                  <span>双车道 · 赛车线优先 · 沿箭头行驶 →</span>
+                  <span>
+                    <i className="innerDot" /> 绿线侧为内圈 · 同格优先
+                  </span>
                 </div>
               </section>
               <aside className="standings">

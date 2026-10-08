@@ -176,3 +176,32 @@ export function geometry(track: Track) {
     title: { x: shape.title[0], y: shape.title[1] },
   };
 }
+
+/** Use the exact same side for cars and the visual Race Line marker. */
+export function laneOffset(track: Track, lane: number) {
+  return (lane === 0 ? 1 : -1) * (track.id === "coastline" ? -10 : 10);
+}
+export function innerGuide(track: Track, g = geometry(track)) {
+  const offset = laneOffset(track, 0);
+  const positions = {
+    usa: 22,
+    france: 55,
+    britain: 24,
+    italy: 34.5,
+    coastline: 16,
+  };
+  const points = (distance: number) =>
+    Array.from({ length: track.length * 4 }, (_, i) =>
+      g.point(i / 4 - 0.5, distance),
+    );
+  const edgePoints = points(offset * 1.7);
+  const path = (p: { x: number; y: number }[]) =>
+    p.map((v, i) => `${i ? "L" : "M"}${v.x} ${v.y}`).join(" ") + " Z";
+  return {
+    edgePoints,
+    edgePath: path(edgePoints),
+    lanePath: path(points(offset)),
+    target: g.point(positions[track.id], offset * 1.7),
+    label: g.point(positions[track.id], offset * 7.5),
+  };
+}

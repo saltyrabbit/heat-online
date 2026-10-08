@@ -1,5 +1,5 @@
 import type { Track } from "../lib/tracks";
-import { geometry } from "../lib/track-geometry";
+import { geometry, innerGuide, laneOffset } from "../lib/track-geometry";
 type Car = {
   id: string;
   name: string;
@@ -17,7 +17,9 @@ export function Circuit({
   r?: { players: Car[]; laps: number } | null;
   large?: boolean;
 }) {
-  const { point, path, labels, title } = geometry(track);
+  const g = geometry(track);
+  const { point, path, labels, title } = g;
+  const inner = innerGuide(track, g);
   const cars = r?.players.filter((p) => !p.rank) || [
     { id: "a", name: "01", color: "#ef573f", pos: 4, lane: 0 },
     { id: "b", name: "02", color: "#50a9e8", pos: 3, lane: 1 },
@@ -29,7 +31,7 @@ export function Circuit({
       className={"circuit " + (large ? "large" : "")}
       viewBox="0 0 840 475"
       role="img"
-      aria-label={`${track.name}赛道，${track.length}格双车道，弯道限速${track.corners.map((c) => c.limit).join("、")}`}
+      aria-label={`${track.name}赛道，${track.length}格双车道，绿线标明内圈赛车线侧，同格时优先，弯道限速${track.corners.map((c) => c.limit).join("、")}`}
     >
       <defs>
         <pattern
@@ -62,6 +64,20 @@ export function Circuit({
         stroke="#abb5ac"
         strokeWidth="1"
         strokeDasharray="5 6"
+      />
+      <path
+        d={inner.lanePath}
+        fill="none"
+        stroke="#75daba"
+        strokeWidth="17"
+        opacity=".12"
+      />
+      <path
+        d={inner.edgePath}
+        fill="none"
+        stroke="#75daba"
+        strokeWidth="3"
+        strokeLinejoin="round"
       />
       {Array.from({ length: track.length }, (_, i) => {
         const a = point(i - 0.5, -20),
@@ -146,10 +162,7 @@ export function Circuit({
         {track.name} · {track.length} 格 · {r?.laps || track.laps} 圈
       </text>
       {cars.map((p) => {
-        const a = point(
-          p.pos,
-          (p.lane === 0 ? 1 : -1) * (track.id === "coastline" ? -10 : 10),
-        );
+        const a = point(p.pos, laneOffset(track, p.lane));
         return (
           <g
             key={p.id}
@@ -173,9 +186,45 @@ export function Circuit({
           </g>
         );
       })}
-      <text x="25" y="465" fontSize="10" fill="#68786b" letterSpacing="1">
-        {track.official ? "基础版赛道参数 · 原创示意重绘" : "原创练习赛道"} ·
-        箭头为行驶方向 · 黄线为弯线
+      <g aria-label="内圈标记，指向绿色赛车线侧">
+        <line
+          x1={inner.label.x}
+          y1={inner.label.y}
+          x2={inner.target.x}
+          y2={inner.target.y}
+          stroke="#387e68"
+          strokeWidth="2"
+        />
+        <circle
+          cx={inner.target.x}
+          cy={inner.target.y}
+          r="4"
+          fill="#75daba"
+          stroke="#f9fff9"
+          strokeWidth="1.5"
+        />
+        <rect
+          x={inner.label.x - 35}
+          y={inner.label.y - 14}
+          width="70"
+          height="28"
+          rx="14"
+          fill="#fffdf5"
+          stroke="#79ac97"
+        />
+        <text
+          x={inner.label.x}
+          y={inner.label.y + 5}
+          textAnchor="middle"
+          fill="#28624f"
+          fontSize="15"
+          fontWeight="800"
+        >
+          内圈
+        </text>
+      </g>
+      <text x="25" y="465" fontSize="11" fill="#416f5a">
+        绿线＝内圈（赛车线侧，同格优先） · 黄线＝弯线 · 箭头＝方向
       </text>
     </svg>
   );

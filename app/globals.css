@@ -1047,3 +1047,7 @@ select:disabled { opacity: .75; }
 .lobbyActions label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 12px; }
 
 .ruleDownloads { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin: 16px 0; }
+
+.innerDot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #75daba; border: 1px solid #387e68; margin-right: 4px; }
+
+.heroMapLegend { padding: 10px 16px; font-size: 12px; line-height: 1.5; color: #416f5a; background: #f7faf1; border-top: 1px solid #d5dccf; }
