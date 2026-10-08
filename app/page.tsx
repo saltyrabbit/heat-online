@@ -2,6 +2,7 @@
 import { useEffect, useRef, useState } from "react";
 import { crossed, type Card } from "../lib/game";
 import { getTrack, TRACK_OPTIONS, type TrackId } from "../lib/tracks";
+import { compareCars, innerLane } from "../lib/track-geometry";
 import { Circuit } from "./circuit";
 type P = {
   id: string;
@@ -93,8 +94,7 @@ export default function Home() {
   const active = r?.turn?.id === r?.me;
   const sorted = r
     ? [...r.players].sort(
-        (a, b) =>
-          (a.rank || 99) - (b.rank || 99) || b.pos - a.pos || a.lane - b.lane,
+        (a, b) => (a.rank || 99) - (b.rank || 99) || compareCars(track, a, b),
       )
     : [];
   function apply(data: R) {
@@ -246,7 +246,7 @@ export default function Home() {
           </span>
         </a>
         <div className="headerRight">
-          <span className="edition">中文 · 基础规则</span>
+          <span className="edition">中文 · 几何内侧规则</span>
           <button className="quiet" onClick={() => setHelp(true)}>
             玩法指南 ↗
           </button>
@@ -275,7 +275,8 @@ export default function Home() {
                   {track.flag} / {track.name}赛道
                 </span>
                 <div className="heroMapLegend">
-                  <i className="innerDot" /> 绿线侧为内圈（赛车线侧，同格优先）
+                  <i className="innerDot" /> 绿线＝几何内侧 · 反向弯会换侧 ·
+                  同格优先
                 </div>
               </div>
               <div className="featureRow">
@@ -442,7 +443,7 @@ export default function Home() {
                     <i className="cornerDot" /> 黄线处检查弯道限速
                   </span>
                   <span>
-                    <i className="innerDot" /> 绿线侧为内圈 · 同格优先
+                    <i className="innerDot" /> 绿线＝几何内侧 · 同格优先
                   </span>
                 </div>
               </section>
@@ -471,7 +472,7 @@ export default function Home() {
                           ? "已就位"
                           : p.rank
                             ? "已完赛"
-                            : `${Math.min(r.laps, Math.max(1, Math.floor(p.pos / track.length) + 1))}/${r.laps} 圈 · ${Math.max(0, p.pos % track.length)} 格`}
+                            : `${Math.min(r.laps, Math.max(1, Math.floor(p.pos / track.length) + 1))}/${r.laps} 圈 · ${Math.max(0, p.pos % track.length)} 格 · ${p.lane === innerLane(track, p.pos) ? "内侧" : "外侧"}`}
                       </span>
                     </div>
                     {r.phase === "plan" && !p.rank ? (
@@ -903,7 +904,7 @@ export default function Home() {
       </main>
       <footer>
         <span>HEAT · CLUB RACING</span>
-        <span>非官方玩法实现 · 官方赛道参数 · 原创美术 · 基础规则</span>
+        <span>非官方玩法实现 · 官方赛道参数 · 原创美术 · 几何内侧规则</span>
       </footer>
       {help && (
         <div className="modalBackdrop" onClick={() => setHelp(false)}>
@@ -931,7 +932,7 @@ export default function Home() {
               </li>
               <li>
                 <b>依位置行动。</b>所出速度牌相加，压力牌翻到基础 1–4
-                速度牌才停。赛车线侧车道在同格时优先。
+                速度牌才停。本版按几何内侧落位并判定同格优先，绿线在反向弯处换侧。
               </li>
               <li>
                 <b>灵活冷却和加速。</b>1 挡可冷却 3 张，2 挡可冷却 1
@@ -952,14 +953,14 @@ export default function Home() {
               </li>
               <li>
                 <b>冲线决定名次。</b>
-                同回合完赛者以最后位置、赛车线侧优先排序。尾流不能跨越最终终点，冲线后的弯不再检查。
+                同回合完赛者以最后位置、落点的几何内侧优先排序。尾流不能跨越最终终点，冲线后的弯不再检查。
               </li>
             </ol>
             <p className="helpNote">
               美国、法国、英国和意大利采用基础版赛道格数、弯线和限速，使用原创示意重绘。意大利正式赛为
               3 圈，其余为 2 圈；另有海岸原创赛道和 1
               圈练习赛。可用牌不足时会强制原地停留并降挡。本版包含起始
-              0、5、热量升级牌，不含车库、天气与扩展规则。
+              0、5、热量升级牌，不含车库、天气与扩展规则。几何内侧优先是本版自定义规则；直线沿用前一弯的内侧，以每格绿线为准。
             </p>
             <a
               className="quiet"

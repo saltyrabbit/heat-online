@@ -86,6 +86,7 @@ const shapes: Record<
   },
 };
 const round = (n: number) => +n.toFixed(3);
+const geometryCache = new WeakMap<Track, ReturnType<typeof createGeometry>>();
 function bezier([a, b, c, d]: Curve, t: number): Point {
   const u = 1 - t;
   return [
@@ -100,6 +101,14 @@ function bezier([a, b, c, d]: Curve, t: number): Point {
   ];
 }
 export function geometry(track: Track) {
+  let value = geometryCache.get(track);
+  if (!value) {
+    value = createGeometry(track);
+    geometryCache.set(track, value);
+  }
+  return value;
+}
+function createGeometry(track: Track) {
   const shape = shapes[track.id];
   if (!shape) {
     const point = (pos: number, offset = 0) => {
@@ -177,12 +186,58 @@ export function geometry(track: Track) {
   };
 }
 
-/** Use the exact same side for cars and the visual Race Line marker. */
+/** Physical lane identity stays fixed when the direction of a bend changes. */
 export function laneOffset(track: Track, lane: number) {
   return (lane === 0 ? 1 : -1) * (track.id === "coastline" ? -10 : 10);
 }
+const innerLaneCache = new WeakMap<Track, number[]>();
+/** House rule: choose the lane towards the local centre of curvature, per cell.
+ * Collinear cells inherit the preceding bend, including across the lap seam.
+ * This table is shared by rendering, landing and all position comparisons.
+ */
+export function innerLane(track: Track, pos: number): number {
+  let lanes = innerLaneCache.get(track);
+  if (!lanes) {
+    const g = geometry(track);
+    const bends = Array.from({ length: track.length }, (_, i) => {
+      const a = g.point(i - 0.3),
+        b = g.point(i),
+        c = g.point(i + 0.3);
+      const ux = b.x - a.x,
+        uy = b.y - a.y;
+      const vx = c.x - b.x,
+        vy = c.y - b.y;
+      const turn =
+        (ux * vy - uy * vx) / (Math.hypot(ux, uy) * Math.hypot(vx, vy));
+      if (Math.abs(turn) < 0.0001) return null;
+      const lane0 = g.point(i, laneOffset(track, 0));
+      const right =
+        -(lane0.x - b.x) * (c.y - a.y) + (lane0.y - b.y) * (c.x - a.x);
+      return turn * right > 0 ? 0 : 1;
+    });
+    let previous = [...bends].reverse().find((lane) => lane !== null) ?? 0;
+    lanes = bends.map((lane) => {
+      if (lane !== null) previous = lane;
+      return previous;
+    });
+    innerLaneCache.set(track, lanes);
+  }
+  const cell =
+    ((Math.floor(pos + 0.5) % track.length) + track.length) % track.length;
+  return lanes[cell];
+}
+export function compareCars(
+  track: Track,
+  a: { pos: number; lane: number },
+  b: { pos: number; lane: number },
+) {
+  return (
+    b.pos - a.pos ||
+    Number(a.lane !== innerLane(track, a.pos)) -
+      Number(b.lane !== innerLane(track, b.pos))
+  );
+}
 export function innerGuide(track: Track, g = geometry(track)) {
-  const offset = laneOffset(track, 0);
   const positions = {
     usa: 22,
     france: 55,
@@ -190,17 +245,25 @@ export function innerGuide(track: Track, g = geometry(track)) {
     italy: 34.5,
     coastline: 16,
   };
-  const points = (distance: number) =>
-    Array.from({ length: track.length * 4 }, (_, i) =>
-      g.point(i / 4 - 0.5, distance),
+  const segments = (scale: number) =>
+    Array.from({ length: track.length }, (_, cell) =>
+      Array.from({ length: 5 }, (_, j) =>
+        g.point(
+          cell - 0.5 + j / 4,
+          laneOffset(track, innerLane(track, cell)) * scale,
+        ),
+      ),
     );
-  const edgePoints = points(offset * 1.7);
-  const path = (p: { x: number; y: number }[]) =>
-    p.map((v, i) => `${i ? "L" : "M"}${v.x} ${v.y}`).join(" ") + " Z";
+  const edgeSegments = segments(1.7);
+  const path = (segments: { x: number; y: number }[][]) =>
+    segments
+      .map((p) => p.map((v, i) => `${i ? "L" : "M"}${v.x} ${v.y}`).join(" "))
+      .join(" ");
+  const offset = laneOffset(track, innerLane(track, positions[track.id]));
   return {
-    edgePoints,
-    edgePath: path(edgePoints),
-    lanePath: path(points(offset)),
+    edgeSegments,
+    edgePath: path(edgeSegments),
+    lanePath: path(segments(1)),
     target: g.point(positions[track.id], offset * 1.7),
     label: g.point(positions[track.id], offset * 7.5),
   };

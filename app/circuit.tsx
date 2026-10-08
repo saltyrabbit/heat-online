@@ -1,5 +1,10 @@
 import type { Track } from "../lib/tracks";
-import { geometry, innerGuide, laneOffset } from "../lib/track-geometry";
+import {
+  geometry,
+  innerGuide,
+  innerLane,
+  laneOffset,
+} from "../lib/track-geometry";
 type Car = {
   id: string;
   name: string;
@@ -31,7 +36,7 @@ export function Circuit({
       className={"circuit " + (large ? "large" : "")}
       viewBox="0 0 840 475"
       role="img"
-      aria-label={`${track.name}赛道，${track.length}格双车道，绿线标明内圈赛车线侧，同格时优先，弯道限速${track.corners.map((c) => c.limit).join("、")}`}
+      aria-label={`${track.name}赛道，${track.length}格双车道，绿线逐格标明几何内侧，反向弯会换侧，同格时优先，弯道限速${track.corners.map((c) => c.limit).join("、")}`}
     >
       <defs>
         <pattern
@@ -168,7 +173,7 @@ export function Circuit({
             key={p.id}
             transform={`translate(${a.x} ${a.y}) rotate(${a.angle})`}
           >
-            <title>{`${p.name}：第 ${Math.max(0, p.pos)} 格`}</title>
+            <title>{`${p.name}：第 ${Math.max(0, p.pos)} 格，${p.lane === innerLane(track, p.pos) ? "几何内侧（同格优先）" : "外侧"}`}</title>
             <rect x="-7" y="-8" width="5" height="16" rx="1" fill="#202b29" />
             <rect x="5" y="-8" width="5" height="16" rx="1" fill="#202b29" />
             <rect
@@ -186,7 +191,7 @@ export function Circuit({
           </g>
         );
       })}
-      <g aria-label="内圈标记，指向绿色赛车线侧">
+      <g aria-label="几何内侧标记，指向本格同格优先侧">
         <line
           x1={inner.label.x}
           y1={inner.label.y}
@@ -220,11 +225,11 @@ export function Circuit({
           fontSize="15"
           fontWeight="800"
         >
-          内圈
+          内侧
         </text>
       </g>
       <text x="25" y="465" fontSize="11" fill="#416f5a">
-        绿线＝内圈（赛车线侧，同格优先） · 黄线＝弯线 · 箭头＝方向
+        绿线＝几何内侧（同格优先，反向弯换侧） · 黄线＝弯线
       </text>
     </svg>
   );

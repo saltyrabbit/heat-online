@@ -1,4 +1,5 @@
 import { getTrack, isTrackId, type Track, type TrackId } from "./tracks.ts";
+import { compareCars, innerLane } from "./track-geometry.ts";
 export const TRACK = getTrack("coastline");
 export const COLORS = [
   "#ef573f",
@@ -156,7 +157,7 @@ function randomSpeed(p: Player): number {
 export function order(r: Room) {
   return r.players
     .filter((p) => !p.rank)
-    .sort((a, b) => b.pos - a.pos || a.lane - b.lane);
+    .sort((a, b) => compareCars(getTrack(r.trackId), a, b));
 }
 function land(r: Room, p: Player, pos: number) {
   const length = getTrack(r.trackId).length;
@@ -170,16 +171,17 @@ function land(r: Room, p: Player, pos: number) {
     ).length >= 2
   )
     pos--;
+  const preferred = innerLane(getTrack(r.trackId), pos);
   const taken = r.players.some(
     (x) =>
       x.id !== p.id &&
       !x.rank &&
       ((x.pos % length) + length) % length ===
         ((pos % length) + length) % length &&
-      x.lane === 0,
+      x.lane === preferred,
   );
   p.pos = pos;
-  p.lane = taken ? 1 : 0;
+  p.lane = taken ? 1 - preferred : preferred;
 }
 export function crossed(
   start: number,
@@ -338,7 +340,7 @@ export function start(r: Room) {
   shuffle(r.players);
   r.players.forEach((p, i) => {
     p.pos = -Math.floor(i / 2);
-    p.lane = i % 2;
+    p.lane = (innerLane(getTrack(r.trackId), p.pos) + (i % 2)) % 2;
     p.gear = 1;
     p.engine = 6;
     p.rank = null;

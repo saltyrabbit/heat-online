@@ -1,4 +1,4 @@
-// Independent rule examples keyed to official Basic Rules v1.1, pp.3-7.
+// Basic mechanics reference official rules v1.1; R05/R19 use the geometric inside house rule.
 // These positions/decks are controlled fixtures, not bot-generated expectations.
 import { test } from "node:test";
 import assert from "node:assert/strict";
@@ -135,7 +135,7 @@ test("R04 p5: blocked destinations retreat, but occupied intermediate cells neve
   lock(s);
   assert.equal(a.pos, 10);
 });
-test("R05 p5: Race Line side is preferred; other side used only when occupied", () => {
+test("R05 custom: geometric inside is preferred; other side used only when occupied", () => {
   const r = setup(3),
     [p, q, z] = r.players;
   p.hand = [c(5)];
@@ -367,7 +367,7 @@ test("R18 p7: cluttered hand skips movement/react/discard, drops gear and refill
   assert.equal(p.discard.filter((c) => c.type === "heat").length, 2);
   assert.notEqual(r.turn.id, p.id);
 });
-test("R19 p7: same-round finish tie prefers Race Line and removes finishers after round", () => {
+test("R19 custom: same-round finish tie prefers geometric inside and removes finishers after round", () => {
   const r = setup(),
     [p, q] = r.players;
   p.pos = 137;
