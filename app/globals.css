@@ -1045,3 +1045,5 @@ select:focus { outline: 2px solid #ce503a; outline-offset: 2px; }
 select:disabled { opacity: .75; }
 .entry .trackFacts, .trackFacts { font-size: 12px; color: #64736a; line-height: 1.6; }
 .lobbyActions label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 12px; }
+
+.ruleDownloads { display: flex; flex-wrap: wrap; align-items: center; gap: 16px; margin: 16px 0; }

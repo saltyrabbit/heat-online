@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { getTrack } from "../lib/tracks.ts";
-import { botPlan } from "../lib/game.ts";
+import { botChoice } from "../lib/game.ts";
 const base = process.env.HEAT_TEST_URL || "http://localhost:5173";
 const sessions = [
   crypto.randomUUID(),
@@ -146,13 +146,13 @@ for (let guard = 0; guard < 800 && r.phase !== "finished"; guard++) {
       p.discard = [];
       p.played = [];
     });
-    botPlan(copy, p);
+    const choice = botChoice(copy, p);
     const result = await call(i, {
       action: "plan",
       code,
       version: r.version,
-      gear: p.gear,
-      cards: p.played.map((c) => c.id),
+      gear: choice.gear,
+      cards: choice.ids,
     });
     assert.equal(result.status, 200, JSON.stringify(result));
     r = result.data;

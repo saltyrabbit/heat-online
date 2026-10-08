@@ -50,13 +50,13 @@ npm run dev
 ## 验证
 
 ```sh
-node --test tests/game.test.mjs tests/maps.test.mjs
+node --test tests/game.test.mjs tests/maps.test.mjs tests/rules-audit.test.mjs
 npx tsc --noEmit
 # 启动本地服务后，执行两名独立玩家的 API 联机验证：
 HEAT_TEST_TRACK=italy HEAT_TEST_FORMAL=1 node tests/network.test.mjs
 ```
 
-测试覆盖规则边界、60 场六车完整比赛（含四张官方赛道各 10 场）、并发操作、重复请求、非法越权行动、手牌隐藏、座位恢复地图边界、跨圈占位、房主选图权限与同步，以及两名网络客户端的完整比赛。
+测试覆盖规则边界、260 场完整比赛（含四张地图 2-6 人组合共 200 场逐操作随机比赛）、并发操作、重复请求、非法越权行动、手牌隐藏、座位恢复、地图边界、跨圈占位、房主选图权限与同步，以及两名网络客户端的完整比赛。
 
 ## 程序结构
 
@@ -71,3 +71,13 @@ HEAT_TEST_TRACK=italy HEAT_TEST_FORMAL=1 node tests/network.test.mjs
 前端每 1.7 秒查询最新房间状态。每次行动由服务器校验，D1 使用版本号条件更新避免同时写入覆盖；请求标识避免成功行动被重复执行。其他车手的未公开手牌与牌库不发送到客户端。Cookie 身份使用 HttpOnly 与 SameSite=Lax。
 
 项目使用 Vinext / React / Cloudflare Workers / D1，通过 Sites 托管。发布配置保存在 `.openai/hosting.json`；源码包不含访问凭据、线上比赛数据或本地数据库。
+
+## 中文规则书与规则核对
+
+- `public/heat-rules-zh.pdf`：8 页中文规则书，含赛道图、完整回合示例与速查。
+- `public/heat-rules-audit-zh.pdf`：3 页测试报告，含官方基础规则逐项对应、发现与修正、联机结果和复现命令。
+- 游戏「玩法指南」中提供两份 PDF 的下载入口。
+
+2026-10-09 核对官方基础规则 v1.1 第 3-7 页，47 项自动测试通过；套圈尾流按物理赛道位置判断，并移除压力翻牌的任意次数上限。联网测试使用纯选牌决策函数，不再对缺少私有牌库的客户端视图执行揭牌逻辑。四张地图的双客户端正式赛均完成。
+
+测试结论限于覆盖的基础规则场景；不包含官方高级模块。数字版动态生成打滑压力牌，不模拟实体盒中的储备牌总量。详细范围见测试报告。

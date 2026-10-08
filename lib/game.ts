@@ -140,8 +140,11 @@ function heat(p: Player, n: number) {
 }
 function randomSpeed(p: Player): number {
   let c: Card | undefined;
-  let guard = 0;
-  while ((c = draw(p)) && guard++ < 200) {
+  assert(
+    [...p.deck, ...p.discard].some((c) => c.type === "speed" && c.basic),
+    "牌库中没有可翻出的基础速度牌",
+  );
+  while ((c = draw(p))) {
     if (c.type === "speed" && c.basic) {
       p.played.push(c);
       return c.value;
@@ -199,12 +202,15 @@ export function crossed(
   return list;
 }
 export function canSlip(r: Room, p: Player) {
+  const length = getTrack(r.trackId).length;
+  const cell = (pos: number) => ((pos % length) + length) % length;
   return (
-    p.pos < getTrack(r.trackId).length * r.laps &&
-    p.pos + 2 < getTrack(r.trackId).length * r.laps &&
+    p.pos + 2 < length * r.laps &&
     r.players.some(
       (x) =>
-        x.id !== p.id && !x.rank && (x.pos === p.pos || x.pos === p.pos + 1),
+        x.id !== p.id &&
+        !x.rank &&
+        (cell(x.pos) === cell(p.pos) || cell(x.pos) === cell(p.pos + 1)),
     )
   );
 }
@@ -449,7 +455,7 @@ function combinations<T>(a: T[], n: number): T[][] {
     combinations(a.slice(i + 1), n - 1).map((v) => [x, ...v]),
   );
 }
-export function botPlan(r: Room, p: Player) {
+export function botChoice(r: Room, p: Player) {
   let best: { gear: number; ids: string[]; score: number } | null = null;
   for (let gear = 1; gear <= 4; gear++) {
     if (
@@ -486,7 +492,11 @@ export function botPlan(r: Room, p: Player) {
         best = { gear, ids: cards.map((c) => c.id), score };
     }
   }
-  plan(r, p, best?.gear ?? 1, best?.ids ?? []);
+  return { gear: best?.gear ?? 1, ids: best?.ids ?? [] };
+}
+export function botPlan(r: Room, p: Player) {
+  const choice = botChoice(r, p);
+  plan(r, p, choice.gear, choice.ids);
 }
 export function autoBots(r: Room) {
   for (let guard = 0; guard < 1200; guard++) {

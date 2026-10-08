@@ -926,7 +926,7 @@ export default function Home() {
               </li>
               <li>
                 <b>依位置行动。</b>所出速度牌相加，压力牌翻到基础 1–4
-                速度牌才停。内侧车道在同格时优先。
+                速度牌才停。赛车线侧车道在同格时优先。
               </li>
               <li>
                 <b>灵活冷却和加速。</b>1 挡可冷却 3 张，2 挡可冷却 1
@@ -935,7 +935,8 @@ export default function Home() {
                 速度。可自由安排这些效果的顺序。
               </li>
               <li>
-                <b>选择尾流，检查弯道。</b>与车并排或落后一格可选择前进 2
+                <b>选择尾流，检查弯道。</b>
+                与车并排或落后一格（包含套圈车辆）可选择前进 2
                 格，尾流不增加速度。越过黄色弯线后，速度超限多少就付多少热量；多弯依次支付。热量不足则退回该弯前，降至
                 1 挡并增加压力牌。
               </li>
@@ -946,7 +947,7 @@ export default function Home() {
               </li>
               <li>
                 <b>冲线决定名次。</b>
-                同回合完赛者以最后位置、内侧优先排序。尾流不能跨越最终终点，冲线后的弯不再检查。
+                同回合完赛者以最后位置、赛车线侧优先排序。尾流不能跨越最终终点，冲线后的弯不再检查。
               </li>
             </ol>
             <p className="helpNote">
@@ -963,6 +964,24 @@ export default function Home() {
             >
               游戏与原版规则出处 ↗
             </a>
+            <div className="ruleDownloads">
+              <a
+                className="outline"
+                href="/heat-rules-zh.pdf"
+                target="_blank"
+                rel="noreferrer"
+              >
+                完整规则书 PDF ↗
+              </a>
+              <a
+                className="quiet"
+                href="/heat-rules-audit-zh.pdf"
+                target="_blank"
+                rel="noreferrer"
+              >
+                规则测试报告 ↗
+              </a>
+            </div>
             <button className="primary wide" onClick={() => setHelp(false)}>
               准备好，发车 →
             </button>
