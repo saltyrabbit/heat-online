@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { TRACK, crossed, type Card } from "../lib/game";
+import { crossed, type Card } from "../lib/game";
+import { getTrack, TRACK_OPTIONS, type TrackId } from "../lib/tracks";
+import { Circuit } from "./circuit";
 type P = {
   id: string;
   name: string;
@@ -24,6 +26,7 @@ type R = {
   me: string;
   phase: string;
   laps: number;
+  trackId?: TrackId;
   round: number;
   version: number;
   players: P[];
@@ -31,229 +34,6 @@ type R = {
   log: string[];
   canSlip: boolean;
 };
-const pt = (pos: number, lane = 0, extra = 0) => {
-  const t = (2 * Math.PI * (((pos % 64) + 64) % 64)) / 64;
-  return {
-    x: +(420 + (315 + (lane ? 13 : -13) + extra) * Math.sin(t)).toFixed(3),
-    y: +(238 - (154 + (lane ? 13 : -13) + extra) * Math.cos(t)).toFixed(3),
-    angle: +((t * 180) / Math.PI).toFixed(3),
-  };
-};
-function Circuit({ r, large = false }: { r?: R | null; large?: boolean }) {
-  const cars = r?.players.filter((p) => !p.rank) || [
-    { id: "a", name: "01", color: "#ef573f", pos: 7, lane: 0 },
-    { id: "b", name: "02", color: "#50a9e8", pos: 6, lane: 1 },
-    { id: "c", name: "03", color: "#f0c34b", pos: 38, lane: 0 },
-  ];
-  return (
-    <svg
-      className={"circuit " + (large ? "large" : "")}
-      viewBox="0 0 840 475"
-      role="img"
-      aria-label="海岸环线，64格双车道，弯道限速分别为3、5、3、4"
-    >
-      <defs>
-        <pattern
-          id="grass"
-          width="16"
-          height="16"
-          patternUnits="userSpaceOnUse"
-        >
-          <circle cx="2" cy="2" r=".7" fill="#acc0ad" />
-        </pattern>
-        <pattern
-          id="finish"
-          width="10"
-          height="10"
-          patternUnits="userSpaceOnUse"
-        >
-          <rect width="5" height="5" fill="white" />
-          <rect x="5" y="5" width="5" height="5" fill="white" />
-        </pattern>
-      </defs>
-      <rect width="840" height="475" fill="#e7ecdf" />
-      <rect width="840" height="475" fill="url(#grass)" />
-      <path
-        d="M250 210Q280 130 405 167T581 220Q637 307 522 319T305 300Q219 280 250 210"
-        fill="#b7d8d1"
-      />
-      <path
-        d="M280 206Q319 158 405 190T553 227"
-        fill="none"
-        stroke="#d4e8e0"
-        strokeWidth="3"
-      />
-      <ellipse
-        cx="420"
-        cy="238"
-        rx="315"
-        ry="154"
-        fill="none"
-        stroke="#fffaf0"
-        strokeWidth="72"
-      />
-      <ellipse
-        cx="420"
-        cy="238"
-        rx="315"
-        ry="154"
-        fill="none"
-        stroke="#d76550"
-        strokeWidth="65"
-        strokeDasharray="9 10"
-      />
-      <ellipse
-        cx="420"
-        cy="238"
-        rx="315"
-        ry="154"
-        fill="none"
-        stroke="#424d4b"
-        strokeWidth="54"
-      />
-      <ellipse
-        cx="420"
-        cy="238"
-        rx="315"
-        ry="154"
-        fill="none"
-        stroke="#abb5ac"
-        strokeWidth="1.4"
-        strokeDasharray="6 7"
-      />
-      {Array.from({ length: 64 }, (_, i) => {
-        const a = pt(i, 0, -12),
-          b = pt(i, 1, 12);
-        return (
-          <line
-            key={i}
-            x1={a.x}
-            y1={a.y}
-            x2={b.x}
-            y2={b.y}
-            stroke="#88948e"
-            strokeWidth="1"
-          />
-        );
-      })}
-      <rect x="414" y="58" width="12" height="54" fill="url(#finish)" />
-      <text
-        x="443"
-        y="39"
-        fill="#55615a"
-        fontSize="11"
-        fontWeight="700"
-        letterSpacing="2"
-      >
-        START / FINISH →
-      </text>
-      {TRACK.corners.map((c, i) => {
-        const a = pt(c.at, 0, -13),
-          b = pt(c.at, 1, 13),
-          label = pt(c.at, 0, 65);
-        return (
-          <g key={c.at}>
-            <line
-              x1={a.x}
-              y1={a.y}
-              x2={b.x}
-              y2={b.y}
-              stroke="#f7cc69"
-              strokeWidth="4"
-            />
-            <circle
-              cx={label.x}
-              cy={label.y}
-              r="19"
-              fill="#f9f6ed"
-              stroke="#c98f48"
-            />
-            <text
-              x={label.x}
-              y={label.y + 6}
-              textAnchor="middle"
-              fontSize="19"
-              fontWeight="800"
-              fill="#73451f"
-            >
-              {c.limit}
-            </text>
-            <text
-              x={label.x}
-              y={label.y + 34}
-              textAnchor="middle"
-              fill="#6d756b"
-              fontSize="10"
-            >
-              弯道 {i + 1}
-            </text>
-          </g>
-        );
-      })}
-      <text
-        x="420"
-        y="225"
-        textAnchor="middle"
-        fill="#365a51"
-        fontSize="28"
-        fontWeight="800"
-        letterSpacing="7"
-      >
-        COASTLINE
-      </text>
-      <text
-        x="420"
-        y="257"
-        textAnchor="middle"
-        fill="#365a51"
-        fontSize="16"
-        letterSpacing="5"
-      >
-        海 岸 环 线
-      </text>
-      <text
-        x="420"
-        y="288"
-        textAnchor="middle"
-        fill="#578074"
-        fontSize="11"
-        letterSpacing="2"
-      >
-        64 格 · 4 处弯道 · {r?.laps || 2} 圈
-      </text>
-      {cars.map((p, i) => {
-        const a = pt(p.pos, p.lane);
-        return (
-          <g
-            key={p.id}
-            transform={`translate(${a.x} ${a.y}) rotate(${a.angle + 90})`}
-          >
-            <title>{`${p.name}：第 ${p.pos} 格`}</title>
-            <rect x="-11" y="-10" width="8" height="4" rx="1" fill="#202b29" />
-            <rect x="-11" y="6" width="8" height="4" rx="1" fill="#202b29" />
-            <rect x="5" y="-10" width="8" height="4" rx="1" fill="#202b29" />
-            <rect x="5" y="6" width="8" height="4" rx="1" fill="#202b29" />
-            <rect
-              x="-13"
-              y="-7"
-              width="29"
-              height="14"
-              rx="6"
-              fill={p.color}
-              stroke="#fff"
-              strokeWidth="1.5"
-            />
-            <rect x="-3" y="-4" width="8" height="8" rx="2" fill="#263e3a" />
-            <path d="M8 -5V5" stroke="white" strokeWidth="2" />
-          </g>
-        );
-      })}
-      <text x="25" y="450" fontSize="10" fill="#68786b" letterSpacing="1.5">
-        原创练习赛道 · 顺时针行驶
-      </text>
-    </svg>
-  );
-}
 function CardButton({
   card,
   chosen,
@@ -297,6 +77,7 @@ export default function Home() {
     [name, setName] = useState(""),
     [code, setCode] = useState(""),
     [laps, setLaps] = useState(2),
+    [trackId, setTrackId] = useState<TrackId>("usa"),
     [gear, setGear] = useState(1),
     [selected, setSelected] = useState<string[]>([]),
     [error, setError] = useState(""),
@@ -307,6 +88,7 @@ export default function Home() {
   const currentCode = useRef("");
   const rRef = useRef<R | null>(null);
   const lastKey = useRef("");
+  const track = getTrack(r ? r.trackId : trackId);
   const me = r?.players.find((p) => p.id === r.me);
   const active = r?.turn?.id === r?.me;
   const sorted = r
@@ -376,7 +158,8 @@ export default function Home() {
           action,
           code: currentCode.current || code.trim().toUpperCase(),
           name: name.trim(),
-          laps,
+          laps: laps === 1 ? 1 : getTrack(trackId).laps,
+          trackId,
           version: rRef.current?.version,
           requestId: crypto.randomUUID(),
           ...extra,
@@ -428,17 +211,21 @@ export default function Home() {
     );
   const nextCorner = me
     ? Array.from({ length: 3 }, (_, i) =>
-        TRACK.corners.map((c) => ({
+        track.corners.map((c) => ({
           ...c,
-          at: c.at + (Math.max(0, Math.floor(me.pos / 64)) + i) * 64,
+          at:
+            c.at +
+            (Math.max(0, Math.floor(me.pos / track.length)) + i) * track.length,
         })),
       )
         .flat()
-        .find((c) => c.at > me.pos && c.at < 64 * (r?.laps || 2))
+        .find(
+          (c) => c.at > me.pos && c.at < track.length * (r?.laps || track.laps),
+        )
     : null;
   const cost =
     r?.turn && me && active
-      ? crossed(r.turn.start, me.pos, r.laps * 64).reduce(
+      ? crossed(r.turn.start, me.pos, r.laps * track.length, track).reduce(
           (n, c) => n + Math.max(0, r.turn.speed - c.limit),
           0,
         )
@@ -483,8 +270,10 @@ export default function Home() {
                 一场关于速度与热量的桌上竞速，现在在线开跑。
               </p>
               <div className="heroMap">
-                <Circuit large />
-                <span className="mapBadge">01 / 海岸环线</span>
+                <Circuit track={track} large />
+                <span className="mapBadge">
+                  {track.flag} / {track.name}赛道
+                </span>
               </div>
               <div className="featureRow">
                 <span>↗ 2–6 位车手</span>
@@ -506,6 +295,25 @@ export default function Home() {
                 />
               </label>
               <label>
+                选择赛道
+                <select
+                  aria-label="选择赛道"
+                  value={trackId}
+                  onChange={(e) => setTrackId(e.target.value as TrackId)}
+                >
+                  {TRACK_OPTIONS.map((t) => (
+                    <option key={t.id} value={t.id}>
+                      {t.flag} {t.name}
+                      {t.official ? " · 基础版" : " · 原创"}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="trackFacts">
+                {track.length} 格 · {track.corners.length} 处弯道 · 限速{" "}
+                {track.corners.map((c) => c.limit).join(" / ")}
+              </p>
+              <label>
                 比赛距离
                 <div className="segmented">
                   <button
@@ -518,7 +326,7 @@ export default function Home() {
                     className={laps === 2 ? "on" : ""}
                     onClick={() => setLaps(2)}
                   >
-                    2 圈 · 正式赛
+                    {track.laps} 圈 · 正式赛
                   </button>
                 </div>
               </label>
@@ -573,7 +381,7 @@ export default function Home() {
                     ? "PADDOCK / 等待发车"
                     : r.phase === "finished"
                       ? "CHEQUERED FLAG / 比赛结束"
-                      : "GRAND PRIX / 海岸大奖赛"}
+                      : `GRAND PRIX / ${track.name}大奖赛`}
                 </div>
                 <h1>
                   {r.phase === "lobby"
@@ -617,7 +425,7 @@ export default function Home() {
               <section className="trackPanel">
                 <div className="panelHeading">
                   <span>
-                    海岸环线 <small>COASTLINE CIRCUIT</small>
+                    {track.name}赛道 <small>{track.english}</small>
                   </span>
                   <span>
                     {r.phase === "lobby"
@@ -625,12 +433,12 @@ export default function Home() {
                       : `第 ${r.round} 回合 · ${r.laps} 圈`}
                   </span>
                 </div>
-                <Circuit r={r} />
+                <Circuit track={track} r={r} />
                 <div className="trackLegend">
                   <span>
                     <i className="cornerDot" /> 黄线处检查弯道限速
                   </span>
-                  <span>双车道 · 内侧优先 · 顺时针 →</span>
+                  <span>双车道 · 赛车线优先 · 沿箭头行驶 →</span>
                 </div>
               </section>
               <aside className="standings">
@@ -658,7 +466,7 @@ export default function Home() {
                           ? "已就位"
                           : p.rank
                             ? "已完赛"
-                            : `${Math.min(r.laps, Math.max(1, Math.floor(p.pos / 64) + 1))}/${r.laps} 圈 · ${Math.max(0, p.pos % 64)} 格`}
+                            : `${Math.min(r.laps, Math.max(1, Math.floor(p.pos / track.length) + 1))}/${r.laps} 圈 · ${Math.max(0, p.pos % track.length)} 格`}
                       </span>
                     </div>
                     {r.phase === "plan" && !p.rank ? (
@@ -684,6 +492,48 @@ export default function Home() {
                 ))}
                 {r.phase === "lobby" ? (
                   <div className="lobbyActions">
+                    <label>
+                      比赛赛道
+                      <select
+                        aria-label="房间赛道"
+                        value={track.id}
+                        disabled={busy || r.me !== r.host}
+                        onChange={(e) =>
+                          send("configure", {
+                            trackId: e.target.value,
+                            laps:
+                              r.laps === 1 ? 1 : getTrack(e.target.value).laps,
+                          })
+                        }
+                      >
+                        {TRACK_OPTIONS.map((t) => (
+                          <option key={t.id} value={t.id}>
+                            {t.flag} {t.name} · {t.length} 格
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label>
+                      比赛距离
+                      <select
+                        aria-label="房间比赛距离"
+                        value={r.laps === 1 ? 1 : 0}
+                        disabled={busy || r.me !== r.host}
+                        onChange={(e) =>
+                          send("configure", {
+                            trackId: track.id,
+                            laps: Number(e.target.value) === 1 ? 1 : track.laps,
+                          })
+                        }
+                      >
+                        <option value={1}>1 圈 · 练习赛</option>
+                        <option value={0}>{track.laps} 圈 · 正式赛</option>
+                      </select>
+                    </label>
+                    <p className="trackFacts">
+                      限速 {track.corners.map((c) => c.limit).join(" / ")} ·
+                      发车后锁定设置
+                    </p>
                     {r.me === r.host ? (
                       <>
                         <button
@@ -1048,7 +898,7 @@ export default function Home() {
       </main>
       <footer>
         <span>HEAT · CLUB RACING</span>
-        <span>非官方玩法实现 · 原创赛道与美术 · 基础规则</span>
+        <span>非官方玩法实现 · 官方赛道参数 · 原创美术 · 基础规则</span>
       </footer>
       {help && (
         <div className="modalBackdrop" onClick={() => setHelp(false)}>
@@ -1100,8 +950,9 @@ export default function Home() {
               </li>
             </ol>
             <p className="helpNote">
-              海岸环线为原创 64 格双车道赛道，默认跑 2
-              圈。可用牌不足时会强制原地停留并降挡。本版包含起始
+              美国、法国、英国和意大利采用基础版赛道格数、弯线和限速，使用原创示意重绘。意大利正式赛为
+              3 圈，其余为 2 圈；另有海岸原创赛道和 1
+              圈练习赛。可用牌不足时会强制原地停留并降挡。本版包含起始
               0、5、热量升级牌，不含车库、天气与扩展规则。
             </p>
             <a

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { getTrack } from "../lib/tracks.ts";
 import { botPlan } from "../lib/game.ts";
 const base = process.env.HEAT_TEST_URL || "http://localhost:5173";
 const sessions = [
@@ -26,7 +27,8 @@ async function get(i, code) {
 const created = await call(0, {
   action: "create",
   name: "网络测试 A",
-  laps: 1,
+  laps: process.env.HEAT_TEST_FORMAL ? 0 : 1,
+  trackId: process.env.HEAT_TEST_TRACK || "usa",
 });
 assert.equal(created.status, 200, JSON.stringify(created));
 let r = created.data;
@@ -36,6 +38,51 @@ assert.equal(joined.status, 200);
 r = (await get(0, code)).data;
 assert.equal(r.players.length, 2);
 assert.equal((await get(2, code)).status, 403);
+assert.equal(r.trackId, process.env.HEAT_TEST_TRACK || "usa");
+assert.equal(
+  r.laps,
+  process.env.HEAT_TEST_FORMAL ? getTrack(r.trackId).laps : 1,
+);
+// Settings are host-only, persisted, and immediately visible to another seat.
+const chosenTrack = r.trackId,
+  chosenLaps = r.laps;
+const forbidden = await call(1, {
+  action: "configure",
+  code,
+  version: r.version,
+  trackId: "italy",
+  laps: 3,
+});
+assert.equal(forbidden.status, 400);
+const invalid = await call(0, {
+  action: "configure",
+  code,
+  version: r.version,
+  trackId: "fake",
+  laps: 2,
+});
+assert.equal(invalid.status, 400);
+const configured = await call(0, {
+  action: "configure",
+  code,
+  version: r.version,
+  trackId: "italy",
+  laps: 2,
+});
+assert.equal(configured.status, 200);
+assert.equal(configured.data.laps, 3);
+const synchronized = (await get(1, code)).data;
+assert.equal(synchronized.trackId, "italy");
+assert.equal(synchronized.laps, 3);
+r = (
+  await call(0, {
+    action: "configure",
+    code,
+    version: configured.data.version,
+    trackId: chosenTrack,
+    laps: chosenLaps,
+  })
+).data;
 const sameVersion = r.version;
 const simultaneous = await Promise.all([
   call(0, { action: "bot", code, version: sameVersion }),
@@ -69,6 +116,18 @@ const duplicate = await call(0, {
 assert.equal(duplicate.status, 200);
 assert.equal(duplicate.data.version, started.data.version);
 r = started.data;
+assert.equal(
+  (
+    await call(0, {
+      action: "configure",
+      code,
+      version: r.version,
+      trackId: "france",
+      laps: 2,
+    })
+  ).status,
+  400,
+);
 const ids = [(await get(0, code)).data.me, (await get(1, code)).data.me];
 let operations = 0;
 for (let guard = 0; guard < 800 && r.phase !== "finished"; guard++) {

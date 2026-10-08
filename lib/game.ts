@@ -1,13 +1,5 @@
-export const TRACK = {
-  name: "海岸环线",
-  length: 64,
-  corners: [
-    { at: 10, limit: 3 },
-    { at: 26, limit: 5 },
-    { at: 41, limit: 3 },
-    { at: 55, limit: 4 },
-  ],
-};
+import { getTrack, isTrackId, type Track, type TrackId } from "./tracks.ts";
+export const TRACK = getTrack("coastline");
 export const COLORS = [
   "#ef573f",
   "#50a9e8",
@@ -55,6 +47,7 @@ export type Room = {
   host: string;
   phase: "lobby" | "plan" | "turn" | "finished";
   laps: number;
+  trackId?: TrackId;
   round: number;
   players: Player[];
   queue: string[];
@@ -108,13 +101,15 @@ export function room(
   name: string,
   token: string,
   laps = 2,
+  trackId: TrackId = "coastline",
 ): Room {
   const p = player(name, token, 0);
   return {
     code,
     host: p.id,
     phase: "lobby",
-    laps,
+    laps: laps === 1 ? 1 : getTrack(trackId).laps,
+    trackId,
     round: 0,
     players: [p],
     queue: [],
@@ -161,12 +156,14 @@ export function order(r: Room) {
     .sort((a, b) => b.pos - a.pos || a.lane - b.lane);
 }
 function land(r: Room, p: Player, pos: number) {
+  const length = getTrack(r.trackId).length;
   while (
     r.players.filter(
       (x) =>
         x.id !== p.id &&
         !x.rank &&
-        ((x.pos % 64) + 64) % 64 === ((pos % 64) + 64) % 64,
+        ((x.pos % length) + length) % length ===
+          ((pos % length) + length) % length,
     ).length >= 2
   )
     pos--;
@@ -174,21 +171,28 @@ function land(r: Room, p: Player, pos: number) {
     (x) =>
       x.id !== p.id &&
       !x.rank &&
-      ((x.pos % 64) + 64) % 64 === ((pos % 64) + 64) % 64 &&
+      ((x.pos % length) + length) % length ===
+        ((pos % length) + length) % length &&
       x.lane === 0,
   );
   p.pos = pos;
   p.lane = taken ? 1 : 0;
 }
-export function crossed(start: number, end: number, finish: number) {
+export function crossed(
+  start: number,
+  end: number,
+  finish: number,
+  track: Track = TRACK,
+) {
+  const length = track.length;
   const list: { at: number; limit: number }[] = [];
   for (
-    let lap = Math.max(0, Math.floor(start / 64));
-    lap <= Math.floor(end / 64);
+    let lap = Math.max(0, Math.floor(start / length));
+    lap <= Math.floor(end / length);
     lap++
   )
-    for (const c of TRACK.corners) {
-      const at = lap * 64 + c.at;
+    for (const c of track.corners) {
+      const at = lap * length + c.at;
       if (start < at && end >= at && at < finish)
         list.push({ at, limit: c.limit });
     }
@@ -196,8 +200,8 @@ export function crossed(start: number, end: number, finish: number) {
 }
 export function canSlip(r: Room, p: Player) {
   return (
-    p.pos < 64 * r.laps &&
-    p.pos + 2 < 64 * r.laps &&
+    p.pos < getTrack(r.trackId).length * r.laps &&
+    p.pos + 2 < getTrack(r.trackId).length * r.laps &&
     r.players.some(
       (x) =>
         x.id !== p.id && !x.rank && (x.pos === p.pos || x.pos === p.pos + 1),
@@ -211,13 +215,17 @@ export function cornerCost(
   start = p.pos,
   end = p.pos,
 ) {
-  return crossed(start, end, 64 * r.laps).reduce(
-    (n, c) => n + Math.max(0, speed - c.limit),
-    0,
-  );
+  return crossed(
+    start,
+    end,
+    getTrack(r.trackId).length * r.laps,
+    getTrack(r.trackId),
+  ).reduce((n, c) => n + Math.max(0, speed - c.limit), 0);
 }
 function newRound(r: Room) {
-  const finishers = order(r).filter((p) => p.pos >= r.laps * 64);
+  const finishers = order(r).filter(
+    (p) => p.pos >= r.laps * getTrack(r.trackId).length,
+  );
   let rank = r.players.filter((p) => p.rank).length;
   for (const p of finishers) {
     p.rank = ++rank;
@@ -285,7 +293,12 @@ function next(r: Room) {
 }
 function checkCorners(r: Room, p: Player) {
   const t = r.turn!;
-  for (const c of crossed(t.start, p.pos, 64 * r.laps)) {
+  for (const c of crossed(
+    t.start,
+    p.pos,
+    getTrack(r.trackId).length * r.laps,
+    getTrack(r.trackId),
+  )) {
     const cost = Math.max(0, t.speed - c.limit);
     if (cost > p.engine) {
       heat(p, p.engine);
@@ -305,6 +318,13 @@ function checkCorners(r: Room, p: Player) {
     }
   }
   t.step = "discard";
+}
+export function configure(r: Room, trackId: unknown, laps: unknown) {
+  assert(r.phase === "lobby", "只能在比赛开始前选择赛道");
+  assert(isTrackId(trackId), "赛道不存在");
+  r.trackId = trackId as TrackId;
+  r.laps = laps === 1 ? 1 : getTrack(r.trackId).laps;
+  log(r, `赛道改为${getTrack(r.trackId).name}，${r.laps} 圈。`);
 }
 export function start(r: Room) {
   assert(r.phase === "lobby", "比赛已经开始");

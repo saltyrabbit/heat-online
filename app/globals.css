@@ -1036,3 +1036,12 @@ footer {
     font-size: 23px;
   }
 }
+
+select {
+  width: 100%; margin-top: 8px; padding: 12px 14px; border: 1px solid #d7d8ca;
+  border-radius: 8px; background: #fffdf7; color: #273c36; font: inherit;
+}
+select:focus { outline: 2px solid #ce503a; outline-offset: 2px; }
+select:disabled { opacity: .75; }
+.entry .trackFacts, .trackFacts { font-size: 12px; color: #64736a; line-height: 1.6; }
+.lobbyActions label { display: block; font-size: 12px; font-weight: 700; margin-bottom: 12px; }

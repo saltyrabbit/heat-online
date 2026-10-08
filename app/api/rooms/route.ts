@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import {
   room,
+  configure,
   player,
   start,
   plan,
@@ -9,6 +10,7 @@ import {
   view,
   type Room,
 } from "../../../lib/game";
+import { getTrack, isTrackId } from "../../../lib/tracks";
 export const dynamic = "force-dynamic";
 function token(req: Request) {
   return (
@@ -60,6 +62,7 @@ export async function POST(req: Request) {
     const b = (await req.json()) as {
       action: string;
       laps: number;
+      trackId?: string;
       name: string;
       code: string;
       requestId: string;
@@ -71,7 +74,10 @@ export async function POST(req: Request) {
     };
     const sid = token(req);
     if (b.action === "create") {
-      const laps = b.laps === 1 ? 1 : 2;
+      if (b.trackId !== undefined && !isTrackId(b.trackId))
+        throw new Error("赛道不存在");
+      const track = getTrack(b.trackId);
+      const laps = b.laps === 1 ? 1 : track.laps;
       for (let i = 0; i < 5; i++) {
         const bytes = crypto.getRandomValues(new Uint8Array(6));
         const alphabet = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
@@ -79,7 +85,7 @@ export async function POST(req: Request) {
           bytes,
           (v) => alphabet[v % alphabet.length],
         ).join("");
-        const r = room(code, String(b.name || "车手"), sid, laps);
+        const r = room(code, String(b.name || "车手"), sid, laps, track.id);
         const result = await env
           .DB!.prepare(
             "INSERT OR IGNORE INTO rooms(code,data,version,expires) VALUES(?,?,0,?)",
@@ -122,11 +128,14 @@ export async function POST(req: Request) {
     } else {
       if (!p) throw new Error("请先加入房间");
       if (
-        ["start", "bot", "remove", "reset", "takeover"].includes(b.action) &&
+        ["start", "bot", "remove", "reset", "takeover", "configure"].includes(
+          b.action,
+        ) &&
         p.id !== r.host
       )
         throw new Error("只有房主可以操作");
-      if (b.action === "start") start(r);
+      if (b.action === "configure") configure(r, b.trackId, b.laps);
+      else if (b.action === "start") start(r);
       else if (b.action === "bot") {
         if (r.phase !== "lobby" || r.players.length >= 6)
           throw new Error("只能在大厅添加电脑，最多六人");
