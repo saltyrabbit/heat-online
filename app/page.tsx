@@ -1,6 +1,13 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { crossed, type Card, type FlipReveal, type RaceAction } from "../lib/game";
+import {
+  crossed,
+  cornerLimit,
+  type Card,
+  type FlipReveal,
+  type RaceAction,
+  type Turn,
+} from "../lib/game";
 import { getTrack, TRACK_OPTIONS, type TrackId } from "../lib/tracks";
 import { compareCars, innerLane } from "../lib/track-geometry";
 import { Circuit } from "./circuit";
@@ -8,6 +15,22 @@ import { RoundEvents } from "./round-events";
 import { RoundFlow } from "./round-flow";
 import { driverStage, isDiscarding } from "../lib/round-status";
 import { createRequestId } from "../lib/request-id";
+import {
+  ModuleOptions,
+  UpgradeFace,
+  RaceConditions,
+  Garage,
+  VariableSpeed,
+  UpgradeActions,
+} from "./modules-ui";
+import {
+  DEFAULT_MODULES,
+  upgrade,
+  speedRange,
+  type Modules,
+  type Weather,
+  type Road,
+} from "../lib/modules";
 const basePath = process.env.NEXT_PUBLIC_HEAT_BASE_PATH || "";
 type P = {
   id: string;
@@ -25,6 +48,9 @@ type P = {
   handCount: number;
   deckCount: number;
   discardCount: number;
+  discard?: Card[];
+  upgrades?: Card[];
+  refreshIds?: string[];
 };
 type R = {
   code: string;
@@ -43,6 +69,20 @@ type R = {
   actions?: RaceAction[];
   queue?: string[];
   pendingDiscards?: string[];
+  modules?: Modules;
+  weather?: Weather;
+  roads?: Road[];
+  garage?: { round: number; market: Card[]; queue: string[] };
+  boostCost?: number;
+  canBoost?: boolean;
+  cornerCost?: number;
+  slipDistances?: number[];
+  mandatory?: {
+    cardId: string;
+    number: number;
+    effect: "heat" | "scrap";
+    amount: number;
+  }[];
 };
 function CardButton({
   card,
@@ -65,19 +105,25 @@ function CardButton({
       disabled={disabled}
       onClick={onClick}
     >
-      <span className="cardlabel">
-        {heat ? "引擎热量" : stress ? "压力" : "速度"}
-      </span>
-      <strong>{heat ? "♨" : stress ? "?" : card.value}</strong>
-      <span className="cardfoot">
-        {heat
-          ? "冷却后回到引擎"
-          : stress
-            ? "翻出基础速度牌"
-            : card.basic
-              ? "基础牌"
-              : "起始升级"}
-      </span>
+      {upgrade(card) ? (
+        <UpgradeFace card={card} />
+      ) : (
+        <>
+          <span className="cardlabel">
+            {heat ? "引擎热量" : stress ? "压力" : "速度"}
+          </span>
+          <strong>{heat ? "♨" : stress ? "?" : card.value}</strong>
+          <span className="cardfoot">
+            {heat
+              ? "冷却后回到引擎"
+              : stress
+                ? "翻出基础速度牌"
+                : card.basic
+                  ? "基础牌"
+                  : "起始升级"}
+          </span>
+        </>
+      )}
       {chosen && <span className="tick">✓</span>}
     </button>
   );
@@ -95,6 +141,9 @@ export default function Home() {
     [help, setHelp] = useState(false),
     [connected, setConnected] = useState(true),
     [notice, setNotice] = useState("");
+  const [moduleSettings, setModuleSettings] = useState<Modules>({
+    ...DEFAULT_MODULES,
+  });
   const currentCode = useRef("");
   const rRef = useRef<R | null>(null);
   const lastKey = useRef("");
@@ -131,7 +180,9 @@ export default function Home() {
   async function refresh(c = currentCode.current) {
     if (!c) return;
     try {
-      const res = await fetch(`${basePath}/api/rooms?code=${encodeURIComponent(c)}`);
+      const res = await fetch(
+        `${basePath}/api/rooms?code=${encodeURIComponent(c)}`,
+      );
       const data = (await res.json()) as R & {
         error: string;
         refresh?: boolean;
@@ -155,7 +206,9 @@ export default function Home() {
         if (saved) refresh(saved);
       }
     } catch {}
-    const timer = setInterval(() => { if (!busyRef.current) refresh(); }, 1700);
+    const timer = setInterval(() => {
+      if (!busyRef.current) refresh();
+    }, 1700);
     return () => clearInterval(timer);
   }, []);
   async function send(action: string, extra: Record<string, unknown> = {}) {
@@ -177,6 +230,7 @@ export default function Home() {
             trackId,
             version: rRef.current?.version,
             requestId,
+            ...(action === "create" ? { modules: moduleSettings } : {}),
             ...extra,
           }),
         });
@@ -222,14 +276,8 @@ export default function Home() {
   const playable = me?.hand.filter((c) => c.type !== "heat").length || 0;
   const forced = playable < gear;
   const chosenCards = me?.hand.filter((c) => selected.includes(c.id)) || [];
-  const minSpeed = chosenCards.reduce(
-      (n, c) => n + (c.type === "stress" ? 1 : c.value),
-      0,
-    ),
-    maxSpeed = chosenCards.reduce(
-      (n, c) => n + (c.type === "stress" ? 4 : c.value),
-      0,
-    );
+  const minSpeed = chosenCards.reduce((n, c) => n + speedRange(c)[0], 0),
+    maxSpeed = chosenCards.reduce((n, c) => n + speedRange(c)[1], 0);
   const nextCorner = me
     ? Array.from({ length: 3 }, (_, i) =>
         track.corners.map((c) => ({
@@ -244,13 +292,7 @@ export default function Home() {
           (c) => c.at > me.pos && c.at < track.length * (r?.laps || track.laps),
         )
     : null;
-  const cost =
-    r?.turn && me && active
-      ? crossed(r.turn.start, me.pos, r.laps * track.length, track).reduce(
-          (n, c) => n + Math.max(0, r.turn.speed - c.limit),
-          0,
-        )
-      : 0;
+  const cost = r?.cornerCost || 0;
   return (
     <>
       <header className="topbar">
@@ -355,6 +397,11 @@ export default function Home() {
                   </button>
                 </div>
               </label>
+              <ModuleOptions
+                value={moduleSettings}
+                disabled={busy}
+                onChange={setModuleSettings}
+              />
               <button
                 className="primary wide"
                 disabled={busy || !name.trim()}
@@ -563,6 +610,17 @@ export default function Home() {
                       限速 {track.corners.map((c) => c.limit).join(" / ")} ·
                       发车后锁定设置
                     </p>
+                    <ModuleOptions
+                      value={r.modules}
+                      disabled={busy || r.me !== r.host}
+                      onChange={(modules) =>
+                        send("configure", {
+                          trackId: track.id,
+                          laps: r.laps,
+                          modules,
+                        })
+                      }
+                    />
                     {r.me === r.host ? (
                       <>
                         <button
@@ -588,25 +646,32 @@ export default function Home() {
                 ) : (
                   <div className="phaseSummary">
                     <span>
-                      {r.phase === "plan"
-                        ? "同时选牌"
-                        : r.phase === "finished"
-                          ? "所有车手已完赛"
-                          : r.turn
-                            ? `${r.players.find((p) => p.id === r.turn?.id)?.name || ""} 正在行动`
-                            : "等待车手完成收尾"}
+                      {r.phase === "draft"
+                        ? "车库选牌"
+                        : r.phase === "plan"
+                          ? "同时选牌"
+                          : r.phase === "finished"
+                            ? "所有车手已完赛"
+                            : r.turn
+                              ? `${r.players.find((p) => p.id === r.turn?.id)?.name || ""} 正在行动`
+                              : "等待车手完成收尾"}
                     </span>
                     <p>
-                      {r.phase === "plan"
-                        ? "所有车手确认后，依发车位置逐个行动。"
-                        : "弯道检查后交接行动；各自收尾，全员完成后进入下一回合。"}
+                      {r.phase === "draft"
+                        ? "先查看天气与路况，再按指定顺序选三张升级。"
+                        : r.phase === "plan"
+                          ? "所有车手确认后，依发车位置逐个行动。"
+                          : "弯道检查后交接行动；各自收尾，全员完成后进入下一回合。"}
                     </p>
                   </div>
                 )}
               </aside>
             </div>
-            <RoundFlow room={r}/>
-            {r.phase !== "lobby" && <RoundEvents room={r} connected={connected}/>}
+            <RaceConditions room={r} />
+            {r.phase !== "draft" && <RoundFlow room={r} />}
+            {r.phase !== "lobby" && r.phase !== "draft" && (
+              <RoundEvents room={r} connected={connected} />
+            )}
             {r.phase === "lobby" ? (
               <section className="lobbyInfo">
                 <span className="infoIcon">↗</span>
@@ -617,6 +682,8 @@ export default function Home() {
                   </p>
                 </div>
               </section>
+            ) : r.phase === "draft" ? (
+              <Garage room={r} busy={busy} send={send} />
             ) : r.phase === "finished" ? (
               <section className="results">
                 <div>
@@ -654,7 +721,9 @@ export default function Home() {
                             : discarding
                               ? "选择弃牌并补牌，其他车手可继续行动"
                               : active
-                                ? "冷却、加速，决定你的极限"
+                                ? r.turn.step === "reveal"
+                                  ? "翻牌完成，选择可变速度"
+                                  : "冷却、加速，决定你的极限"
                                 : myStage === "done"
                                   ? "本回合已完成，等待下一回合"
                                   : "等待前方车手行动"}
@@ -671,7 +740,11 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
-                  {busy && <p className="actionSync" role="status">正在同步你的行动…</p>}
+                  {busy && (
+                    <p className="actionSync" role="status">
+                      正在同步你的行动…
+                    </p>
+                  )}
                   {r.phase === "plan" && !me.plan && !me.rank && (
                     <div className="planning">
                       <div className="gearBox">
@@ -705,7 +778,7 @@ export default function Home() {
                         </strong>
                         <span>
                           {nextCorner
-                            ? `距弯前最后一格 ${nextCorner.at - 1 - me.pos} 格，限速 ${nextCorner.limit}`
+                            ? `距弯前最后一格 ${nextCorner.at - 1 - me.pos} 格，限速 ${cornerLimit(r!, me, nextCorner.at, nextCorner.limit)}`
                             : "前方终点直道"}
                           {Math.abs(gear - me.gear) === 2
                             ? " · 换两挡支付 1 热量"
@@ -720,6 +793,15 @@ export default function Home() {
                         {forced ? "确认过热停留" : "锁定选牌"} →
                       </button>
                     </div>
+                  )}
+                  {active && r.turn.step === "reveal" && (
+                    <VariableSpeed
+                      room={r}
+                      busy={busy}
+                      act={(kind, options, cards) =>
+                        send("react", { kind, options, cards })
+                      }
+                    />
                   )}
                   {active && r.turn.step === "react" && (
                     <div className="reactRow">
@@ -737,10 +819,18 @@ export default function Home() {
                         </button>
                         <button
                           className="outline"
-                          disabled={busy || r.turn.boost || me.engine < 1}
+                          disabled={
+                            busy ||
+                            r.turn.boost ||
+                            r.canBoost === false ||
+                            me.engine < (r.boostCost ?? 1)
+                          }
                           onClick={() => send("react", { kind: "boost" })}
                         >
-                          ↗ 加速 <small>付 1 热量 · +1–4</small>
+                          ↗ 加速{" "}
+                          <small>
+                            {r.boostCost === 0 ? "免热量" : "付 1 热量"} · +1–4
+                          </small>
                         </button>
                         <button
                           className="outline"
@@ -750,6 +840,19 @@ export default function Home() {
                           ＋ 肾上腺素 <small>速度 +1</small>
                         </button>
                       </div>
+                      <UpgradeActions
+                        room={r}
+                        busy={busy}
+                        act={(kind, options, cards) =>
+                          send("react", { kind, options, cards })
+                        }
+                      />
+                      {r.mandatory?.length ? (
+                        <p className="mandatoryNote">
+                          先结算 {r.mandatory.length}{" "}
+                          项必付升级效果，再检查弯道。
+                        </p>
+                      ) : null}
                       <div
                         className={"cost " + (cost > me.engine ? "danger" : "")}
                       >
@@ -757,16 +860,28 @@ export default function Home() {
                         {cost > me.engine ? " · 将打滑" : ""}
                       </div>
                       <div className="actionButtons">
-                        <button
-                          className="outline"
-                          disabled={busy || !r.canSlip}
-                          onClick={() => send("react", { kind: "slip" })}
-                        >
-                          尾流 +2 · 检查弯道
-                        </button>
+                        {(r.slipDistances?.length ? r.slipDistances : [2]).map(
+                          (distance) => (
+                            <button
+                              key={distance}
+                              className="outline"
+                              disabled={
+                                busy || !r.canSlip || !!r.mandatory?.length
+                              }
+                              onClick={() =>
+                                send("react", {
+                                  kind: "slip",
+                                  options: { distance },
+                                })
+                              }
+                            >
+                              尾流 +{distance} · 检查弯道
+                            </button>
+                          ),
+                        )}
                         <button
                           className="primary"
-                          disabled={busy}
+                          disabled={busy || !!r.mandatory?.length}
                           onClick={() => send("react", { kind: "check" })}
                         >
                           不使用尾流 · 检查弯道 →
@@ -776,6 +891,18 @@ export default function Home() {
                   )}
                   {discarding && (
                     <div className="planning">
+                      {me.refreshIds?.length ? (
+                        <p className="refreshNote">
+                          保留牌会在补牌前放回抽牌堆顶：
+                          {me.refreshIds
+                            .map(
+                              (id) =>
+                                "#" +
+                                me.played.find((c) => c.id === id)?.upgrade,
+                            )
+                            .join(" → ")}
+                        </p>
+                      ) : null}
                       <p>
                         可选弃掉速度牌，然后自动补牌。压力牌和热量牌必须保留；你的收尾不会阻塞下一位车手。
                       </p>
@@ -790,18 +917,31 @@ export default function Home() {
                       </button>
                     </div>
                   )}
-                  <div className="pileCounts" role="group" aria-label="你的牌堆张数">
+                  <div
+                    className="pileCounts"
+                    role="group"
+                    aria-label="你的牌堆张数"
+                  >
                     <div className="pileCount">
                       <span>抽牌堆</span>
-                      <strong>{me.deckCount}<small>张</small></strong>
+                      <strong>
+                        {me.deckCount}
+                        <small>张</small>
+                      </strong>
                     </div>
                     <div className="pileCount">
                       <span>弃牌堆</span>
-                      <strong>{me.discardCount}<small>张</small></strong>
+                      <strong>
+                        {me.discardCount}
+                        <small>张</small>
+                      </strong>
                     </div>
                     <div className="pileCount" title="引擎区可用的热量卡">
                       <span>引擎区</span>
-                      <strong>{me.engine}<small>张</small></strong>
+                      <strong>
+                        {me.engine}
+                        <small>张</small>
+                      </strong>
                     </div>
                   </div>
                   <div className="handHeading">
@@ -829,8 +969,7 @@ export default function Home() {
                             (r.phase === "plan" &&
                               !me.plan &&
                               c.type !== "heat") ||
-                            (discarding &&
-                              c.type === "speed")
+                            (discarding && c.type === "speed")
                           )
                         }
                         onClick={() => toggle(c.id)}
@@ -922,7 +1061,7 @@ export default function Home() {
             </div>
           </>
         )}
-        {!r && <RoundFlow/>}
+        {!r && <RoundFlow />}
       </main>
       <footer>
         <span>HEAT · CLUB RACING</span>
@@ -946,7 +1085,7 @@ export default function Home() {
             </button>
             <div className="eyebrow">QUICK START / 发车指南</div>
             <h2 id="helpTitle">快，也要过得了弯。</h2>
-            <RoundFlow compact/>
+            <RoundFlow compact />
             <ol>
               <li>
                 <b>同时换挡并选牌。</b>
@@ -983,8 +1122,53 @@ export default function Home() {
               美国、法国、英国和意大利采用基础版赛道格数、弯线和限速，使用原创示意重绘。意大利正式赛为
               3 圈，其余为 2 圈；另有海岸原创赛道和 1
               圈练习赛。可用牌不足时会强制原地停留并降挡。本版包含起始
-              0、5、热量升级牌，不含车库、天气与扩展规则。几何内侧优先是本版自定义规则；直线沿用前一弯的内侧，以每格绿线为准。
+              0、5、热量升级牌；启用车库后，由 3
+              张选定升级替换。支持基础盒的天气与路况、普通和高级升级三个独立开关。几何内侧优先是本版自定义规则；直线沿用前一弯的内侧，以每格绿线为准。
             </p>
+            <section className="expansionGuide">
+              <h3>天气与车库</h3>
+              <p>
+                房主开赛前选择扩展。先公开整场天气与每个弯道的路况，再进行三轮车库选牌：第一、三轮后到前，第二轮前到后；每轮市场为人数
+                +3 张，剩余牌弃置。每人 3 张升级洗入初始牌库，替换全部起始升级。
+              </p>
+              <p>
+                路况作用于弯道，或从该弯道线后直到下一个弯道线前的路段。“天气”标记才应用天气的路段效果；冷却、加速和尾流均按执行时的位置判断。禁止冷却覆盖挡位、肾上腺素和升级；禁止尾流只禁止从该路段发起。升级、天气和路况的尾流奖励可叠加，每个奖励需完整使用，可选择不用。
+              </p>
+              <p>
+                第 3
+                步先结算所有“＋”翻牌，再选择刹车等可变速度。反应阶段可追加油门踏板，张数不受挡位限制；所有必付热量、必弃牌库效果结算后才能进行尾流和弯道检查。无法支付升级热量时，弃掉该升级并翻出随机基础速度牌替换。
+              </p>
+              <dl>
+                <dt>冷却 / 减压</dt>
+                <dd>
+                  分别将手牌热量移回引擎，或将手牌压力弃掉，可少于图标数量。
+                </dd>
+                <dt>回收</dt>
+                <dd>从自己的弃牌堆选择至多指定数量的任意牌，洗入抽牌堆。</dd>
+                <dt>保留</dt>
+                <dd>
+                  反应阶段决定；第 9
+                  步补牌前将该升级放回牌顶。多张按点击顺序从牌顶抽取，选择随异步收尾保存。
+                </dd>
+                <dt>每次翻牌再 +1</dt>
+                <dd>
+                  每个已用或之后使用的“＋”符号增加 1
+                  速度，包括压力、升级与加速，计入弯道检查。
+                </dd>
+                <dt>必弃牌库</dt>
+                <dd>按数量弃掉牌库顶部的牌，牌库空时照常洗入弃牌堆。</dd>
+                <dt>个人限速</dt>
+                <dd>只调整你本回合跨越的所有弯道，可与弯道路况叠加。</dd>
+              </dl>
+              <a
+                className="quiet"
+                href="https://cdn.svc.asmodee.net/production-daysofwonder/uploads/2025/03/9101-HT-RulesAdvanced-EN_compressed.pdf"
+                target="_blank"
+                rel="noreferrer"
+              >
+                官方进阶规则 v1.1（车库第 3–4 页，天气第 6–7 页）↗
+              </a>
+            </section>
             <a
               className="quiet"
               href="https://www.daysofwonder.com/game/heat/"
@@ -1000,7 +1184,7 @@ export default function Home() {
                 target="_blank"
                 rel="noreferrer"
               >
-                完整规则书 PDF ↗
+                基础规则书 PDF ↗
               </a>
               <a
                 className="quiet"

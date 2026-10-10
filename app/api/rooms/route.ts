@@ -5,6 +5,8 @@ import {
   player,
   start,
   plan,
+  draft,
+  type ReactOptions,
   react,
   autoBots,
   view,
@@ -24,7 +26,9 @@ function response(data: unknown, status = 200, sid?: string, started?: number) {
     status,
     headers: {
       "Cache-Control": "no-store",
-      ...(started !== undefined ? {"Server-Timing": `app;dur=${Date.now() - started}`} : {}),
+      ...(started !== undefined
+        ? { "Server-Timing": `app;dur=${Date.now() - started}` }
+        : {}),
       ...(sid
         ? {
             "Set-Cookie": `heat_sid=${sid}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
@@ -53,7 +57,8 @@ export async function GET(req: Request) {
 }
 export async function POST(req: Request) {
   const started = Date.now();
-  const reply = (data: unknown, status = 200, sid?: string) => response(data, status, sid, started);
+  const reply = (data: unknown, status = 200, sid?: string) =>
+    response(data, status, sid, started);
   try {
     if (
       req.headers.get("origin") &&
@@ -74,6 +79,9 @@ export async function POST(req: Request) {
       gear: number;
       cards: string[];
       kind: string;
+      modules?: unknown;
+      cardId?: string;
+      options?: ReactOptions;
     };
     const sid = token(req);
     if (b.action === "create") {
@@ -89,6 +97,7 @@ export async function POST(req: Request) {
           (v) => alphabet[v % alphabet.length],
         ).join("");
         const r = room(code, String(b.name || "车手"), sid, laps, track.id);
+        if (b.modules !== undefined) configure(r, track.id, laps, b.modules);
         const result = await getRoomDatabase()
           .prepare(
             "INSERT OR IGNORE INTO rooms(code,data,version,expires) VALUES(?,?,0,?)",
@@ -106,10 +115,12 @@ export async function POST(req: Request) {
     r.version = row.version;
     if (typeof b.requestId !== "string" || b.requestId.length > 80)
       throw new Error("请求标识无效");
-    if (r.requests.includes(b.requestId))
-      return reply(view(r, sid), 200, sid);
+    if (r.requests.includes(b.requestId)) return reply(view(r, sid), 200, sid);
     if (b.action !== "join" && b.version !== row.version)
-      return reply({ error: "房间状态已更新，请重试", refresh: true, state: view(r, sid) }, 409);
+      return reply(
+        { error: "房间状态已更新，请重试", refresh: true, state: view(r, sid) },
+        409,
+      );
     let p = r.players.find((p) => p.token === sid);
     if (b.action === "join") {
       if (!p) {
@@ -137,7 +148,7 @@ export async function POST(req: Request) {
         p.id !== r.host
       )
         throw new Error("只有房主可以操作");
-      if (b.action === "configure") configure(r, b.trackId, b.laps);
+      if (b.action === "configure") configure(r, b.trackId, b.laps, b.modules);
       else if (b.action === "start") start(r);
       else if (b.action === "bot") {
         if (r.phase !== "lobby" || r.players.length >= 6)
@@ -170,6 +181,11 @@ export async function POST(req: Request) {
         target.token = crypto.randomUUID();
         r.log.push(`${target.name} 由电脑接管。`);
       } else if (b.action === "reset") {
+        r.weather = undefined;
+        r.roads = undefined;
+        r.garage = undefined;
+        r.reveals = [];
+        r.actions = [];
         r.phase = "lobby";
         r.turn = null;
         r.queue = [];
@@ -179,14 +195,20 @@ export async function POST(req: Request) {
         for (const p of r.players) {
           p.pos = 0;
           p.rank = null;
+          p.deck = [];
+          p.discard = [];
+          p.upgrades = [];
+          p.refreshIds = [];
           p.hand = [];
           p.played = [];
           p.plan = false;
           p.gear = 1;
           p.engine = 6;
         }
-      } else if (b.action === "plan") plan(r, p, b.gear, b.cards);
-      else if (b.action === "react") react(r, p, b.kind, b.cards || []);
+      } else if (b.action === "draft") draft(r, p, String(b.cardId || ""));
+      else if (b.action === "plan") plan(r, p, b.gear, b.cards);
+      else if (b.action === "react")
+        react(r, p, b.kind, b.cards || [], b.options || {});
       else throw new Error("未知操作");
     }
     autoBots(r);
@@ -206,8 +228,13 @@ export async function POST(req: Request) {
       .run();
     if (!result.meta.changes) {
       const latest = await read(code);
-      const state = latest ? view({...JSON.parse(latest.data), version: latest.version}, sid) : undefined;
-      return reply({ error: "其他车手刚刚行动，请重试", refresh: true, state }, 409);
+      const state = latest
+        ? view({ ...JSON.parse(latest.data), version: latest.version }, sid)
+        : undefined;
+      return reply(
+        { error: "其他车手刚刚行动，请重试", refresh: true, state },
+        409,
+      );
     }
     return reply(view(r, sid), 200, sid);
   } catch (e) {

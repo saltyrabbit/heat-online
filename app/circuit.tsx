@@ -5,6 +5,13 @@ import {
   innerLane,
   laneOffset,
 } from "../lib/track-geometry";
+import {
+  ROAD_ICONS,
+  ROAD_LABELS,
+  sector,
+  roadAt,
+  type Road,
+} from "../lib/modules";
 type Car = {
   id: string;
   name: string;
@@ -19,7 +26,7 @@ export function Circuit({
   large = false,
 }: {
   track: Track;
-  r?: { players: Car[]; laps: number } | null;
+  r?: { players: Car[]; laps: number; roads?: Road[] } | null;
   large?: boolean;
 }) {
   const g = geometry(track);
@@ -36,7 +43,15 @@ export function Circuit({
       className={"circuit " + (large ? "large" : "")}
       viewBox="0 0 840 475"
       role="img"
-      aria-label={`${track.name}赛道，${track.length}格双车道，绿线逐格标明几何内侧，反向弯会换侧，同格时优先，弯道限速${track.corners.map((c) => c.limit).join("、")}`}
+      aria-label={`${track.name}赛道，${track.length}格双车道，绿线逐格标明几何内侧，反向弯会换侧，同格时优先，弯道限速${track.corners
+        .map((c) => {
+          const road = r && roadAt(r, c.at);
+          return (
+            c.limit +
+            (road?.kind === "limitUp" ? 1 : road?.kind === "limitDown" ? -1 : 0)
+          );
+        })
+        .join("、")}`}
     >
       <defs>
         <pattern
@@ -103,12 +118,43 @@ export function Circuit({
         <rect x="-3" y="-20" width="7" height="40" fill="url(#finish)" />
         <path d="M9 -5L17 0L9 5" stroke="#fff" strokeWidth="2" fill="none" />
       </g>
+      {r?.roads &&
+        Array.from({ length: track.length }, (_, i) => {
+          const road = sector(r, i, track);
+          if (!road || !["slip", "freeBoost", "weather"].includes(road.kind))
+            return null;
+          const a = point(i - 0.5, -23),
+            b = point(i + 0.5, -23);
+          return (
+            <path
+              aria-hidden="true"
+              key={`road-${i}`}
+              d={`M${a.x} ${a.y} L${b.x} ${b.y}`}
+              stroke={
+                road.kind === "weather"
+                  ? "#6e97c4"
+                  : road.kind === "slip"
+                    ? "#9180b6"
+                    : "#7aaa67"
+              }
+              strokeWidth="5"
+              opacity=".85"
+            >
+              <title>{ROAD_LABELS[road.kind]}</title>
+            </path>
+          );
+        })}
       {track.corners.map((c, i) => {
         const a = point(c.at - 0.5, -21),
           b = point(c.at - 0.5, 21),
           label = labels[i];
+        const road = r && roadAt(r, c.at);
+        const limit =
+          c.limit +
+          (road?.kind === "limitUp" ? 1 : road?.kind === "limitDown" ? -1 : 0);
         return (
           <g key={c.at}>
+            {road && <title>{`${i + 1} 号：${ROAD_LABELS[road.kind]}`}</title>}
             <line
               x1={a.x}
               y1={a.y}
@@ -132,7 +178,7 @@ export function Circuit({
               fontWeight="800"
               fill="#73451f"
             >
-              {c.limit}
+              {limit}
             </text>
             <text
               x={label.x}
@@ -141,7 +187,7 @@ export function Circuit({
               fill="#6d756b"
               fontSize="10"
             >
-              弯道 {i + 1}
+              {road ? `${i + 1} · ${ROAD_ICONS[road.kind]}` : `弯道 ${i + 1}`}
             </text>
           </g>
         );
