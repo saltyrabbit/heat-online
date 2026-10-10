@@ -679,7 +679,7 @@ export default function Home() {
                         </strong>
                         <span>
                           {nextCorner
-                            ? `距下一弯 ${nextCorner.at - me.pos} 格，限速 ${nextCorner.limit}`
+                            ? `距弯前最后一格 ${nextCorner.at - 1 - me.pos} 格，限速 ${nextCorner.limit}`
                             : "前方终点直道"}
                           {Math.abs(gear - me.gear) === 2
                             ? " · 换两挡支付 1 热量"
