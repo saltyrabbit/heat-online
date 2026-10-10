@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { crossed, type Card, type FlipReveal } from "../lib/game";
+import { crossed, type Card, type FlipReveal, type RaceAction } from "../lib/game";
 import { getTrack, TRACK_OPTIONS, type TrackId } from "../lib/tracks";
 import { compareCars, innerLane } from "../lib/track-geometry";
 import { Circuit } from "./circuit";
@@ -35,6 +35,8 @@ type R = {
   log: string[];
   canSlip: boolean;
   reveals?: FlipReveal[];
+  actions?: RaceAction[];
+  queue?: string[];
 };
 function CardButton({
   card,
@@ -87,36 +89,18 @@ export default function Home() {
     [help, setHelp] = useState(false),
     [connected, setConnected] = useState(true),
     [notice, setNotice] = useState("");
-  const [flipReveals, setFlipReveals] = useState<FlipReveal[]>([]);
-  const revealSeen = useRef({ code: "", ids: new Set<string>() });
   const currentCode = useRef("");
   const rRef = useRef<R | null>(null);
   const lastKey = useRef("");
   const track = getTrack(r ? r.trackId : trackId);
   const me = r?.players.find((p) => p.id === r.me);
   const active = r?.turn?.id === r?.me;
+  const flipReveals = (r?.reveals || []).filter((event) => event.round === r?.round).slice().reverse();
   const sorted = r
     ? [...r.players].sort(
         (a, b) => (a.rank || 99) - (b.rank || 99) || compareCars(track, a, b),
       )
     : [];
-  useEffect(() => {
-    if (revealSeen.current.code !== (r?.code || "")) {
-      revealSeen.current = { code: r?.code || "", ids: new Set() };
-      setFlipReveals([]);
-    }
-    const fresh = (r?.reveals || []).filter((event) => {
-      if (revealSeen.current.ids.has(event.id)) return false;
-      revealSeen.current.ids.add(event.id);
-      return Date.now() - event.at < 20000;
-    });
-    if (fresh.length) setFlipReveals((previous) => [...previous, ...fresh].slice(-6));
-  }, [r?.code, r?.reveals]);
-  useEffect(() => {
-    if (!flipReveals.length) return;
-    const timer = setTimeout(() => setFlipReveals([]), 20000);
-    return () => clearTimeout(timer);
-  }, [flipReveals]);
   function apply(data: R) {
     if (currentCode.current && data.code !== currentCode.current) return;
     if (rRef.current?.code === data.code && data.version < rRef.current.version)
@@ -598,6 +582,31 @@ export default function Home() {
                     </p>
                   </div>
                 )}
+                {r.phase !== "lobby" && (
+                  <section className="roundActions" aria-label="其他玩家本回合行动">
+                    <div className="roundActionsHeading">
+                      <strong>本回合行动</strong>
+                      <small>第 {r.round} 回合 · {connected ? "实时同步" : "等待重连"}</small>
+                    </div>
+                    <div className="roundActionsList" aria-live="polite">
+                      {sorted.filter((p) => p.id !== r.me).map((p) => {
+                        const actions = (r.actions || []).filter((action) => action.round === r.round && action.playerId === p.id);
+                        const status = p.rank ? "已完赛" : r.phase === "plan" ? p.plan ? "已锁定选牌" : "选牌中" : r.turn?.id === p.id ? "行动中" : r.queue?.includes(p.id) ? "等待行动" : "本回合已结束";
+                        return (
+                          <div className="roundDriver" key={p.id}>
+                            <div className="roundDriverHeading">
+                              <strong><i style={{background:p.color}} />{p.name}</strong>
+                              <span>{status}</span>
+                            </div>
+                            {actions.length ? (
+                              <ol>{actions.map((action) => <li key={action.id}>{action.text}</li>)}</ol>
+                            ) : <p>{r.phase === "plan" ? "等待选牌" : "暂无行动记录"}</p>}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </section>
+                )}
               </aside>
             </div>
             {r.phase === "lobby" ? (
@@ -797,9 +806,9 @@ export default function Home() {
                   {flipReveals.length > 0 && (
                     <section className="flipReveals" aria-label="最近翻牌" aria-live="polite">
                       <div className="flipHeading">
-                        <span>实际翻牌 <small>20 秒后收起</small></span>
-                        <button type="button" onClick={() => setFlipReveals([])}>收起翻牌</button>
+                        <span>本回合翻牌 <small>保留至下一回合</small></span>
                       </div>
+                      <div className="flipRevealList">
                       {flipReveals.map((event) => (
                         <div className="flipReveal" key={event.id}>
                           <div className="flipSummary">
@@ -817,6 +826,7 @@ export default function Home() {
                           </ol>
                         </div>
                       ))}
+                      </div>
                     </section>
                   )}
                   <div className="handHeading">

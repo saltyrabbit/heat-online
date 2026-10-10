@@ -189,6 +189,11 @@ for (let guard = 0; guard < 800 && r.phase !== "finished"; guard++) {
     assert.equal(result.status, 200, JSON.stringify(result));
     r = result.data;
   } else throw Error("unexpected phase " + r.phase);
+  const observer = (await get(1 - i, code)).data;
+  assert.equal(observer.version, r.version);
+  assert.deepEqual(observer.actions, r.actions);
+  assert.deepEqual(observer.reveals, r.reveals);
+  assert.ok((observer.actions || []).every((action) => action.round <= observer.round));
   operations++;
 }
 assert.equal(r.phase, "finished");
@@ -208,6 +213,7 @@ console.log(
       "hidden hands",
       "wrong-turn rejection",
       "two-client complete race",
+      "live round action and reveal synchronization",
     ],
   }),
 );

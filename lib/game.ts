@@ -17,11 +17,18 @@ export type Card = {
 };
 export type FlipReveal = {
   id: string;
+  round: number;
   playerId: string;
   kind: "stress" | "boost";
   cards: Card[];
   value: number;
   at: number;
+};
+export type RaceAction = {
+  id: string;
+  round: number;
+  playerId: string;
+  text: string;
 };
 export type Player = {
   id: string;
@@ -65,6 +72,7 @@ export type Room = {
   requests: string[];
   version: number;
   reveals?: FlipReveal[];
+  actions?: RaceAction[];
 };
 const assert = (ok: unknown, msg: string) => {
   if (!ok) throw new Error(msg);
@@ -129,8 +137,17 @@ export function room(
     version: 0,
   };
 }
-function log(r: Room, s: string) {
+function recordAction(r: Room, p: Player, text: string) {
+  r.actions = [...(r.actions || []), {
+    id: crypto.randomUUID(),
+    round: r.round,
+    playerId: p.id,
+    text,
+  }].slice(-120);
+}
+function log(r: Room, s: string, p?: Player) {
   r.log = [...r.log, s].slice(-80);
+  if (p) recordAction(r, p, s);
 }
 function draw(p: Player): Card | undefined {
   if (!p.deck.length) p.deck = shuffle(p.discard.splice(0));
@@ -161,12 +178,13 @@ function randomSpeed(r: Room, p: Player, kind: FlipReveal["kind"]): number {
       p.played.push(c);
       r.reveals = [...(r.reveals || []), {
         id: crypto.randomUUID(),
+        round: r.round,
         playerId: p.id,
         kind,
         cards,
         value: c.value,
         at: Date.now(),
-      }].slice(-16);
+      }].slice(-64);
       return c.value;
     }
     p.discard.push(c);
@@ -256,7 +274,7 @@ function newRound(r: Room) {
   let rank = r.players.filter((p) => p.rank).length;
   for (const p of finishers) {
     p.rank = ++rank;
-    log(r, `${p.name} 完赛，获得第 ${rank} 名！`);
+    log(r, `${p.name} 完赛，获得第 ${rank} 名！`, p);
   }
   if (r.players.every((p) => p.rank)) {
     r.phase = "finished";
@@ -279,11 +297,12 @@ function next(r: Room) {
       p.gear = 1;
       p.discard.push(...p.played.splice(0));
       refill(p);
-      log(r, `${p.name} 手牌过热，原地停留并降至 1 挡。`);
+      log(r, `${p.name} 手牌过热，原地停留并降至 1 挡。`, p);
       r.queue.shift();
       continue;
     }
     const start = p.pos;
+    recordAction(r, p, `${p.name} 打出：${p.played.map((c) => c.type === "stress" ? "压力" : `速度 ${c.value}`).join("、")}。`);
     let speed = 0;
     const stress: number[] = [];
     for (const c of [...p.played]) {
@@ -313,6 +332,7 @@ function next(r: Room) {
     log(
       r,
       `${p.name} 以速度 ${speed} 前进${stress.length ? "（压力：" + stress.join("+") + "）" : ""}。`,
+      p,
     );
     return;
   }
@@ -336,12 +356,13 @@ function checkCorners(r: Room, p: Player) {
       log(
         r,
         `${p.name} 在限速 ${c.limit} 的弯道打滑！退回弯前，增加 ${stress} 张压力牌。`,
+        p,
       );
       break;
     }
     if (cost) {
       heat(p, cost);
-      log(r, `${p.name} 过弯支付 ${cost} 热量。`);
+      log(r, `${p.name} 过弯支付 ${cost} 热量。`, p);
     }
   }
   t.step = "discard";
@@ -358,6 +379,7 @@ export function start(r: Room) {
   assert(r.players.length >= 2, "至少需要两名车手，可以添加电脑");
   shuffle(r.players);
   r.reveals = [];
+  r.actions = [];
   r.players.forEach((p, i) => {
     p.pos = -Math.floor(i / 2);
     p.lane = (innerLane(getTrack(r.trackId), p.pos) + (i % 2)) % 2;
@@ -416,6 +438,7 @@ export function plan(r: Room, p: Player, gear: number, ids: string[]) {
   p.played = ids.map((id) => p.hand.find((c) => c.id === id)!);
   p.hand = p.hand.filter((c) => !ids.includes(c.id));
   p.plan = true;
+  recordAction(r, p, `${p.name} 已锁定选牌（${gear} 挡）。`);
   if (r.players.filter((p) => !p.rank).every((p) => p.plan)) next(r);
 }
 export function react(r: Room, p: Player, action: string, ids: string[] = []) {
@@ -435,6 +458,7 @@ export function react(r: Room, p: Player, action: string, ids: string[] = []) {
     p.hand = p.hand.filter((c) => !ids.includes(c.id));
     p.discard.push(...p.played.splice(0));
     refill(p);
+    recordAction(r, p, `${p.name} 弃掉 ${ids.length} 张速度牌，补牌至 ${p.hand.length} 张，结束回合。`);
     r.queue.shift();
     next(r);
     return;
@@ -446,7 +470,7 @@ export function react(r: Room, p: Player, action: string, ids: string[] = []) {
     p.hand.splice(i, 1);
     p.engine++;
     t.cool--;
-    log(r, `${p.name} 冷却 1 张热量牌。`);
+    log(r, `${p.name} 冷却 1 张热量牌。`, p);
   } else if (action === "boost") {
     assert(!t.boost, "每回合只能加速一次");
     heat(p, 1);
@@ -454,20 +478,22 @@ export function react(r: Room, p: Player, action: string, ids: string[] = []) {
     const n = randomSpeed(r, p, "boost");
     t.speed += n;
     land(r, p, p.pos + n);
-    log(r, `${p.name} 加速 +${n}。`);
+    log(r, `${p.name} 加速 +${n}。`, p);
   } else if (action === "adrenaline") {
     assert(!t.adrenaline, "没有可用的肾上腺素加速");
     t.adrenaline = true;
     t.speed++;
     land(r, p, p.pos + 1);
+    log(r, `${p.name} 使用肾上腺素前进 1 格。`, p);
   } else if (action === "check" || action === "slip") {
     if (action === "slip") {
       assert(canSlip(r, p), "当前不能尾流，或尾流会跨越终点");
       land(r, p, p.pos + 2);
       t.slip = true;
-      log(r, `${p.name} 使用尾流前进 2 格。`);
+      log(r, `${p.name} 使用尾流前进 2 格。`, p);
     }
     checkCorners(r, p);
+    recordAction(r, p, `${p.name} 完成弯道检查。`);
   } else throw new Error("未知行动");
 }
 function combinations<T>(a: T[], n: number): T[][] {

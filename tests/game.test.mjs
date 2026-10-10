@@ -121,11 +121,58 @@ test("boost records actual flips and survives advancement to another driver's tu
   assert.deepEqual(r.reveals[0].cards.map((card) => card.id), [upgrade.id, skippedHeat.id, four.id]);
   assert.equal(r.reveals[0].kind, "boost");
   assert.equal(r.reveals[0].value, 4);
+  assert.equal(r.reveals[0].round, r.round);
   assert.ok(Number.isFinite(r.reveals[0].at));
   react(r, p, "check");
   react(r, p, "finish");
   assert.equal(r.turn.id, q.id);
   assert.equal(view(r, q.token).reveals[0].cards.at(-1).id, four.id);
+  const previousRound = r.round;
+  react(r, q, "check");
+  react(r, q, "finish");
+  assert.equal(r.round, previousRound + 1);
+  assert.equal(view(r, p.token).reveals.filter((event) => event.round === r.round).length, 0);
+});
+test("public round actions show locked status before revealing chosen cards", () => {
+  const r = controlled(), p = r.players[0], q = r.players[1];
+  delete r.actions;
+  plan(r, p, 1, [p.hand[0].id]);
+  const actions = view(r, q.token).actions;
+  assert.equal(actions.length, 1);
+  assert.equal(actions[0].playerId, p.id);
+  assert.equal(actions[0].round, r.round);
+  assert.equal(actions[0].text, `${p.name} 已锁定选牌（1 挡）。`);
+  assert.ok(!JSON.stringify(actions).includes(p.hand[0].id));
+  assert.equal(view(r, q.token).players.find((x) => x.id === p.id).played.length, 0);
+});
+test("round actions retain movement, cooldown, boost, corner checks and turn completion", () => {
+  const r = controlled(), p = r.players[0], q = r.players[1];
+  plan(r, p, 1, [p.hand[0].id]);
+  plan(r, q, 1, [q.hand[1].id]);
+  react(r, p, "cool");
+  react(r, p, "boost");
+  react(r, p, "check");
+  react(r, p, "finish");
+  const actions = view(r, q.token).actions.filter((action) => action.playerId === p.id);
+  for (const phrase of ["已锁定选牌", "打出", "以速度", "冷却", "加速", "过弯支付", "完成弯道检查", "结束回合"])
+    assert.ok(actions.some((action) => action.text.includes(phrase)), phrase);
+  assert.equal(new Set(actions.map((action) => action.id)).size, actions.length);
+  assert.ok(actions.every((action) => action.round === r.round));
+  react(r, q, "adrenaline");
+  assert.ok(r.actions.some((action) => action.playerId === q.id && action.text.includes("肾上腺素")));
+  react(r, q, "check");
+  react(r, q, "finish");
+  assert.equal(r.actions.filter((action) => action.round === r.round).length, 0);
+});
+test("automatic bot turns retain round action history after their turn ends", () => {
+  const r = controlled(), p = r.players[0], q = r.players[1];
+  p.bot = true;
+  plan(r, q, 1, [q.hand[1].id]);
+  autoBots(r);
+  assert.equal(r.turn.id, q.id);
+  const actions = view(r, q.token).actions.filter((action) => action.playerId === p.id && action.round === r.round);
+  assert.ok(actions.some((action) => action.text.includes("以速度")));
+  assert.ok(actions.some((action) => action.text.includes("结束回合")));
 });
 test("cooldown recycles hand heat, corner charges full speed including boost", () => {
   const r = controlled(),
