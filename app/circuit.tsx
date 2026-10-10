@@ -38,6 +38,8 @@ export function Circuit({
     { id: "c", name: "03", color: "#f0c34b", pos: track.length - 3, lane: 0 },
   ];
   const start = point(-0.5);
+  const weatherRoads =
+    r?.roads?.filter((road) => road.kind === "weather") || [];
   return (
     <svg
       className={"circuit " + (large ? "large" : "")}
@@ -51,7 +53,24 @@ export function Circuit({
             (road?.kind === "limitUp" ? 1 : road?.kind === "limitDown" ? -1 : 0)
           );
         })
-        .join("、")}`}
+        .join("、")}${
+        r?.roads?.length
+          ? `。蓝色底纹标出天气路段：${
+              weatherRoads.length
+                ? weatherRoads
+                    .map((road) => {
+                      const i = track.corners.findIndex(
+                        (c) => c.at === road.at,
+                      );
+                      const end =
+                        track.corners[(i + 1) % track.corners.length].at;
+                      return `${i + 1} 号，从 ${road.at} 格起到 ${end} 格弯道线前`;
+                    })
+                    .join("；")
+                : "本场无天气标记"
+            }`
+          : ""
+      }`}
     >
       <defs>
         <pattern
@@ -66,6 +85,16 @@ export function Circuit({
           <rect width="4" height="4" fill="white" />
           <rect x="4" y="4" width="4" height="4" fill="white" />
         </pattern>
+        <pattern
+          id="weatherHatch"
+          width="8"
+          height="8"
+          patternUnits="userSpaceOnUse"
+          patternTransform="rotate(45)"
+        >
+          <rect width="8" height="8" fill="#517ea7" />
+          <line x1="0" y1="0" x2="0" y2="8" stroke="#a5cdec" strokeWidth="2" />
+        </pattern>
       </defs>
       <rect width="840" height="475" fill="#e7ecdf" />
       <rect width="840" height="475" fill="url(#grass)" />
@@ -78,6 +107,27 @@ export function Circuit({
         strokeDasharray="8 8"
       />
       <path d={path} fill="none" stroke="#424d4b" strokeWidth="40" />
+      {r?.roads &&
+        Array.from({ length: track.length }, (_, i) => {
+          if (sector(r, i, track)?.kind !== "weather") return null;
+          const points = Array.from({ length: 5 }, (_, j) =>
+            point(i - 0.5 + j / 4),
+          );
+          return (
+            <path
+              key={`weather-fill-${i}`}
+              data-weather-cell={i}
+              aria-hidden="true"
+              d={points
+                .map((p, j) => `${j ? "L" : "M"}${p.x} ${p.y}`)
+                .join(" ")}
+              fill="none"
+              stroke="url(#weatherHatch)"
+              strokeWidth="38"
+              opacity=".72"
+            />
+          );
+        })}
       <path
         d={path}
         fill="none"
@@ -152,6 +202,14 @@ export function Circuit({
         const limit =
           c.limit +
           (road?.kind === "limitUp" ? 1 : road?.kind === "limitDown" ? -1 : 0);
+        const captionX =
+          road?.kind === "weather"
+            ? Math.min(745, Math.max(95, label.x))
+            : label.x;
+        const captionY =
+          road?.kind === "weather" && label.y > 410
+            ? label.y - 32
+            : label.y + 32;
         return (
           <g key={c.at}>
             {road && <title>{`${i + 1} 号：${ROAD_LABELS[road.kind]}`}</title>}
@@ -180,14 +238,30 @@ export function Circuit({
             >
               {limit}
             </text>
+            {road?.kind === "weather" && (
+              <rect
+                x={captionX - 60}
+                y={captionY - 15}
+                width="120"
+                height="23"
+                rx="7"
+                fill="#edf6ff"
+                stroke="#6097c6"
+              />
+            )}
             <text
-              x={label.x}
-              y={label.y + 32}
+              x={captionX}
+              y={captionY}
               textAnchor="middle"
-              fill="#6d756b"
-              fontSize="10"
+              fill={road?.kind === "weather" ? "#265c85" : "#6d756b"}
+              fontSize={road?.kind === "weather" ? "13" : "10"}
+              fontWeight={road?.kind === "weather" ? "700" : "400"}
             >
-              {road ? `${i + 1} · ${ROAD_ICONS[road.kind]}` : `弯道 ${i + 1}`}
+              {road?.kind === "weather"
+                ? `☁ ${i + 1} 号天气路段`
+                : road
+                  ? `${i + 1} · ${ROAD_ICONS[road.kind]}`
+                  : `弯道 ${i + 1}`}
             </text>
           </g>
         );
@@ -274,6 +348,35 @@ export function Circuit({
           内侧
         </text>
       </g>
+      {r?.roads?.length ? (
+        <g
+          aria-label={
+            weatherRoads.length ? "蓝色斜纹是天气路段" : "本场无天气路段"
+          }
+        >
+          {weatherRoads.length > 0 && (
+            <rect
+              x="25"
+              y="438"
+              width="15"
+              height="12"
+              rx="2"
+              fill="url(#weatherHatch)"
+            />
+          )}
+          <text
+            x={weatherRoads.length ? 47 : 25}
+            y="448"
+            fontSize="12"
+            fill="#2c628b"
+            fontWeight="700"
+          >
+            {weatherRoads.length
+              ? "蓝色斜纹＝天气路段 · 天气的路段效果仅此处生效"
+              : "本场无天气路段（未抽到 ☁ 天气标记）"}
+          </text>
+        </g>
+      ) : null}
       <text x="25" y="465" fontSize="11" fill="#416f5a">
         绿线＝几何内侧（同格优先，反向弯换侧） · 黄线＝弯线
       </text>

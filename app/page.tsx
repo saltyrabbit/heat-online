@@ -18,6 +18,8 @@ import { createRequestId } from "../lib/request-id";
 import {
   ModuleOptions,
   UpgradeFace,
+  UpgradeHelp,
+  UpgradeLoadouts,
   RaceConditions,
   Garage,
   VariableSpeed,
@@ -97,7 +99,7 @@ function CardButton({
 }) {
   const heat = card.type === "heat",
     stress = card.type === "stress";
-  return (
+  const button = (
     <button
       type="button"
       className={`card ${heat ? "heat" : stress ? "stress" : "speed"} ${chosen ? "chosen" : ""}`}
@@ -126,6 +128,14 @@ function CardButton({
       )}
       {chosen && <span className="tick">✓</span>}
     </button>
+  );
+  return upgrade(card) ? (
+    <div className="upgradeHandItem">
+      {button}
+      <UpgradeHelp card={card} />
+    </div>
+  ) : (
+    button
   );
 }
 export default function Home() {
@@ -668,6 +678,7 @@ export default function Home() {
               </aside>
             </div>
             <RaceConditions room={r} />
+            <UpgradeLoadouts room={r} />
             {r.phase !== "draft" && <RoundFlow room={r} />}
             {r.phase !== "lobby" && r.phase !== "draft" && (
               <RoundEvents room={r} connected={connected} />

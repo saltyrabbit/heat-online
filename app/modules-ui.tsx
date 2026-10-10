@@ -1,6 +1,8 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import type { Card, ReactOptions, Turn } from "../lib/game";
+import { upgradeNotes } from "../lib/upgrade-help";
 import {
   DEFAULT_MODULES,
   WEATHER_LABELS,
@@ -8,6 +10,7 @@ import {
   ROAD_ICONS,
   upgrade,
   effectText,
+  effectLines,
   sector,
   sectorEffect,
   type Modules,
@@ -69,16 +72,134 @@ export function UpgradeFace({ card }: { card: Card }) {
         {u.plus > 0 && <span>{" ＋".repeat(u.plus)}</span>}
       </strong>
       <span className="upgradeName">{u.name}</span>
-      <small className="upgradeEffects">
-        {u.heatCard
-          ? "不能主动打出 · 冷却后回到引擎"
-          : effectText(u) ||
-            (u.speed.length > 1
-              ? "翻牌后选择速度"
-              : u.plus
-                ? "每个＋翻至基础速度牌"
-                : "无额外反应效果")}
-      </small>
+      <span className="upgradeEffects">
+        {u.heatCard ? (
+          <small>不能主动打出；冷却时从手牌回到引擎</small>
+        ) : (
+          <>
+            {u.speed.length > 1 && (
+              <small>
+                <span>第 3 步 · 选择</span>翻牌后，从上方数字选一个速度
+              </small>
+            )}
+            {u.plus > 0 && (
+              <small>
+                <span>第 3 步 · 自动</span>每个＋翻至基础速度牌，加上该数字
+              </small>
+            )}
+            {effectLines(u).map((line) => (
+              <small key={line.key}>
+                <span>{line.timing}</span>
+                {line.text}
+              </small>
+            ))}
+            {!u.plus && u.speed.length === 1 && !effectText(u) && (
+              <small>第 3 步自动加上牌面速度</small>
+            )}
+          </>
+        )}
+      </span>
+    </>
+  );
+}
+function UpgradeDialog({ card, close }: { card: Card; close: () => void }) {
+  const ref = useRef<HTMLDialogElement>(null);
+  const u = upgrade(card)!;
+  useEffect(() => {
+    const dialog = ref.current!;
+    dialog.showModal();
+    return () => {
+      if (dialog.open) dialog.close();
+    };
+  }, []);
+  return createPortal(
+    <dialog
+      ref={ref}
+      className="upgradeDialog"
+      aria-label={`#${u.number} ${u.name} · 效果说明`}
+      onClose={close}
+      onClick={(e) => {
+        if (e.target === e.currentTarget) close();
+      }}
+    >
+      <div className="upgradeDialogContent">
+        <header>
+          <div>
+            <div className="eyebrow">
+              改装卡效果说明 · {u.advanced ? "高级" : "普通"}
+            </div>
+            <h2>
+              #{u.number} {u.name}
+            </h2>
+          </div>
+          <button
+            type="button"
+            className="upgradeDialogClose"
+            aria-label="关闭效果说明"
+            onClick={close}
+          >
+            ×
+          </button>
+        </header>
+        <p className="upgradeScope">
+          {u.heatCard
+            ? "这是一张额外的热量牌。"
+            : "只有本轮打出这张牌，才会获得它的速度和效果；选入车库或拿在手里不会自动生效。"}
+        </p>
+        {!u.heatCard && (
+          <p className="upgradeTrigger">
+            反应效果：轮到自己，完成翻牌与移动后，在第 5
+            步使用；进入尾流或弯道检查后就不能再用。本轮每张牌的同一效果只使用一次，冷却可分次用完。带“追加”的牌可在此时直接从手牌打出。
+          </p>
+        )}
+        <ol className="upgradeNoteList">
+          {upgradeNotes(u).map((note) => (
+            <li key={note.label}>
+              <div className="upgradeNoteHeading">
+                <span className={`effectKind ${note.kind}`}>
+                  {note.kind === "mandatory"
+                    ? "必须执行"
+                    : note.kind === "optional"
+                      ? "可选使用"
+                      : "自动结算"}
+                </span>
+                <h3>{note.label}</h3>
+              </div>
+              <small>{note.timing}</small>
+              <p>{note.text}</p>
+              {note.example && (
+                <p className="upgradeExample">例：{note.example}</p>
+              )}
+            </li>
+          ))}
+        </ol>
+        {(u.effects.heat || u.effects.scrap) && (
+          <p className="upgradeMandatoryHelp">
+            必付热量和必弃抽牌堆顶的效果全部处理完，才能进入尾流和弯道检查。反应效果的执行顺序由你决定。
+          </p>
+        )}
+        <button type="button" className="primary" onClick={close}>
+          明白了，返回比赛
+        </button>
+      </div>
+    </dialog>,
+    document.body,
+  );
+}
+export function UpgradeHelp({ card }: { card: Card }) {
+  const [open, setOpen] = useState(false);
+  const u = upgrade(card)!;
+  return (
+    <>
+      <button
+        type="button"
+        className="upgradeHelp"
+        aria-label={`查看 #${u.number} ${u.name} 的效果说明`}
+        onClick={() => setOpen(true)}
+      >
+        ⓘ 效果说明
+      </button>
+      {open && <UpgradeDialog card={card} close={() => setOpen(false)} />}
     </>
   );
 }
@@ -143,7 +264,7 @@ export function RaceConditions({ room }: { room: ModuleRoom }) {
               {w.icon} {w.name}
             </b>
             <span>{w.setup}</span>
-            <small>仅“天气”路段：{WEATHER_LABELS[w.effect]}</small>
+            <small>仅 ☁ 天气标记路段生效：{WEATHER_LABELS[w.effect]}</small>
           </div>
           <div className="roadGrid">
             {(room.roads || []).map((road, i) => {
@@ -160,7 +281,11 @@ export function RaceConditions({ room }: { room: ModuleRoom }) {
                 >
                   <strong>
                     {ROAD_ICONS[road.kind]} {i + 1} 号
-                    {isSector ? "路段" : "弯道"}
+                    {road.kind === "weather"
+                      ? "天气路段"
+                      : isSector
+                        ? "路段"
+                        : "弯道"}
                   </strong>
                   <span>
                     {ROAD_LABELS[road.kind]}
@@ -177,9 +302,17 @@ export function RaceConditions({ room }: { room: ModuleRoom }) {
               );
             })}
           </div>
+          <p className="weatherScope">
+            ☁
+            天气路段＝放有“天气”路况标记的路段，从该弯道线开始，直到下一条弯道线前。天气卡的路段效果只在这里生效；冷却或尾流按点击动作时所在位置判断。
+            {!room.roads?.some((road) => road.kind === "weather") &&
+              "本场没有天气标记路段，因此该路段效果本场不会触发；开局的热量或压力调整仍然有效。"}
+          </p>
           {room.phase !== "lobby" && room.phase !== "draft" && (
             <p className="conditionCurrent">
-              你当前路段：
+              {current?.kind === "weather"
+                ? `你当前位于 ${(room.roads || []).findIndex((road) => road.at === current.at) + 1} 号天气路段：`
+                : "你当前不在天气标记路段；当前路段效果："}
               {effect && ["slip2", "noSlip", "cool1", "noCool"].includes(effect)
                 ? WEATHER_LABELS[effect as keyof typeof WEATHER_LABELS]
                 : current && ["slip", "freeBoost"].includes(current.kind)
@@ -216,19 +349,25 @@ export function Garage({
         每人每轮选 1 张。顺序：后→前、前→后、后→前；每轮剩余牌移出市场。
         {room.modules?.weather ? "天气与路况已公开。" : ""}
       </p>
+      <p className="garageHelp">
+        卡面写明牌的去向；点“效果说明”查看时机、费用和例子，查看不会选牌。
+      </p>
       <div className="upgradeMarket">
         {g.market.map((c) => (
-          <button
-            className="upgradeCard"
-            key={c.id}
-            disabled={busy || !active}
-            onClick={() => send("draft", { cardId: c.id })}
-          >
-            <UpgradeFace card={c} />
-            <span className="draftPick">
-              {active ? "选择此升级 →" : "市场公开"}
-            </span>
-          </button>
+          <div className="upgradeMarketItem" key={c.id}>
+            <button
+              className="upgradeCard"
+              key={c.id}
+              disabled={busy || !active}
+              onClick={() => send("draft", { cardId: c.id })}
+            >
+              <UpgradeFace card={c} />
+              <span className="draftPick">
+                {active ? "选择此升级 →" : "市场公开"}
+              </span>
+            </button>
+            <UpgradeHelp card={c} />
+          </div>
         ))}
       </div>
       <div className="draftDrivers">
@@ -247,6 +386,42 @@ export function Garage({
           </div>
         ))}
       </div>
+    </section>
+  );
+}
+export function UpgradeLoadouts({ room }: { room: ModuleRoom }) {
+  if (
+    ["lobby", "draft"].includes(room.phase) ||
+    !room.players.some((p) => p.upgrades?.length)
+  )
+    return null;
+  const players = [...room.players].sort(
+    (a, b) => Number(b.id === room.me) - Number(a.id === room.me),
+  );
+  return (
+    <section className="upgradeLoadouts" aria-label="所选赛车改装">
+      <h3>赛车改装 · 所选升级</h3>
+      <p>
+        这些牌已洗入各自牌组。速度升级抽到并打出后才生效；额外热量需先冷却回引擎区。升级效果不是整场常驻加成。
+      </p>
+      {players.map((p) => (
+        <details key={p.id} open={p.id === room.me} className="driverUpgrades">
+          <summary>
+            {p.name}
+            {p.id === room.me ? "（你）" : ""} · {p.upgrades?.length || 0}{" "}
+            张升级
+            <span>{p.upgrades?.map((c) => upgrade(c)!.name).join(" / ")}</span>
+          </summary>
+          <div className="selectedUpgrades">
+            {p.upgrades?.map((c) => (
+              <article className="selectedUpgrade" key={c.id}>
+                <UpgradeFace card={c} />
+                <UpgradeHelp card={c} />
+              </article>
+            ))}
+          </div>
+        </details>
+      ))}
     </section>
   );
 }
@@ -324,13 +499,13 @@ export function UpgradeActions({
     choice?.effect === "salvage"
       ? p.discard || []
       : p.hand.filter((c) => c.type === "stress");
-  const labels: Partial<Record<keyof Effects, string>> = {
-    heat: "支付热量",
-    scrap: "弃牌库顶",
-    reduce: "选择压力减压",
-    salvage: "选择弃牌回收",
-    refresh: "收尾时放牌顶",
-    accelerate: `每次翻牌再 +1（当前 +${t.plus || 0}）`,
+  const labels: Partial<Record<keyof Effects, (n: number) => string>> = {
+    heat: (n) => `必须支付 ${n} 张引擎热量`,
+    scrap: (n) => `必须弃抽牌堆顶 ${n} 张`,
+    reduce: (n) => `弃掉至多 ${n} 张手牌压力`,
+    salvage: (n) => `选至多 ${n} 张弃牌洗入抽牌堆`,
+    refresh: () => "补牌前将此牌放回牌顶",
+    accelerate: () => `启用＋奖励 · 现在速度 +${t.plus || 0}`,
   };
   const action = (id: string, effect: keyof Effects, n?: number) => {
     if (effect === "reduce" || effect === "salvage") {
@@ -346,6 +521,10 @@ export function UpgradeActions({
       <h3>
         升级牌反应 <small>可自选顺序 · 必付效果需全部完成</small>
       </h3>
+      <p className="upgradeTrigger">
+        现在是你的第 5
+        步：翻牌、移动已完成，以下已打出升级的效果可以使用。进入尾流或弯道检查后，反应阶段结束。
+      </p>
       {relevant.map((c) => {
         const u = upgrade(c)!,
           state = t.effects?.[c.id];
@@ -354,6 +533,7 @@ export function UpgradeActions({
             <b>
               #{u.number} {u.name}
             </b>
+            <UpgradeHelp card={c} />
             <small>{effectText(u)}</small>
             <div className="actionButtons">
               {Object.entries(u.effects)
@@ -372,8 +552,7 @@ export function UpgradeActions({
                     }
                   >
                     {state?.used.includes(k) ? "✓ " : ""}
-                    {labels[k as keyof Effects]}
-                    {typeof v === "number" ? ` ${v}` : ""}
+                    {labels[k as keyof Effects]!(v as number)}
                   </button>
                 ))}
               {u.effects.heat &&
@@ -393,7 +572,10 @@ export function UpgradeActions({
       })}
       {direct.length > 0 && (
         <div className="directPlays">
-          <h4>可从手牌追加打出（不受挡位张数限制）</h4>
+          <h4>反应阶段，可从手牌额外打出以下牌</h4>
+          <p>
+            不占挡位要求的出牌张数。打出后立即增加速度，并结算该牌的费用和效果。
+          </p>
           <div className="actionButtons">
             {direct.map((c) => (
               <button

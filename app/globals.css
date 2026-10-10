@@ -1818,7 +1818,7 @@ select:disabled {
   justify-content: space-between;
 }
 .upgradeCard {
-  width: 160px;
+  width: 100%;
   min-height: 225px;
   cursor: pointer;
 }
@@ -1850,13 +1850,248 @@ select:disabled {
   font-weight: 700;
 }
 .upgradeEffects {
-  font-size: 10px;
+  display: grid;
+  gap: 8px;
+  width: 100%;
+  font-size: 12px;
   line-height: 1.8;
-  max-width: 138px;
   min-height: 34px;
   white-space: normal;
-  text-align: center;
+  text-align: left;
   color: #59694f;
+}
+.upgradeEffects > small {
+  display: block;
+  font-size: inherit;
+  line-height: 1.6;
+}
+.upgradeEffects > small > span {
+  display: block;
+  color: #71846d;
+  font-size: 10px;
+  margin-bottom: 2px;
+}
+.upgradeMarketItem {
+  width: 200px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.upgradeMarketItem > .upgradeCard {
+  flex: 1;
+  gap: 10px;
+}
+.upgradeHelp {
+  border: 1px solid #cad5c5;
+  border-radius: 7px;
+  color: #335e46;
+  background: #f4f7ed;
+  padding: 8px 10px;
+  font-size: 12px;
+  cursor: pointer;
+}
+.upgradeHelp:hover {
+  background: #e6efdf;
+}
+.upgradeHelp:focus-visible,
+.upgradeDialog button:focus-visible {
+  outline: 3px solid #397653;
+  outline-offset: 3px;
+}
+.upgradeHandItem {
+  flex: 0 0 155px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.upgradeHandItem > .card:has(.upgradeMeta) {
+  width: 100%;
+  height: auto;
+  flex: 1;
+  gap: 9px;
+  min-height: 220px;
+}
+.upgradeHandItem .upgradeEffects {
+  font-size: 11px;
+}
+.garage .garageHelp {
+  color: #385f46;
+}
+.weatherScope {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #64795c;
+  margin: 14px 0 0;
+}
+.upgradeDialog {
+  padding: 0;
+  width: min(620px, calc(100vw - 32px));
+  max-height: calc(100dvh - 40px);
+  border: 1px solid #b9cbb5;
+  border-radius: 16px;
+  background: #fcfcf5;
+  color: #294a3a;
+  box-shadow: 0 15px 65px #183b3045;
+}
+.upgradeDialog::backdrop {
+  background: #183b3080;
+}
+.upgradeDialogContent {
+  padding: 26px;
+}
+.upgradeDialog header {
+  display: flex;
+  gap: 12px;
+  align-items: start;
+  justify-content: space-between;
+}
+.upgradeDialog h2 {
+  font-size: 26px;
+  margin: 7px 0 0;
+}
+.upgradeDialogClose {
+  border: 0;
+  background: transparent;
+  color: #335e46;
+  font-size: 28px;
+  padding: 0 6px;
+  cursor: pointer;
+}
+.upgradeScope,
+.upgradeTrigger {
+  font-size: 13px;
+  line-height: 1.8;
+}
+.upgradeDialog .upgradeTrigger {
+  background: #eef3e6;
+  border-radius: 8px;
+  padding: 12px;
+}
+.upgradeNoteList {
+  list-style: none;
+  padding: 0;
+  margin: 18px 0;
+  display: grid;
+  gap: 14px;
+}
+.upgradeNoteList > li {
+  border-top: 1px solid #d8e0cf;
+  padding-top: 14px;
+}
+.upgradeNoteHeading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.upgradeNoteHeading h3 {
+  margin: 0;
+  font-size: 16px;
+}
+.effectKind {
+  font-size: 10px;
+  border-radius: 5px;
+  padding: 3px 6px;
+  white-space: nowrap;
+  background: #e6eedf;
+}
+.effectKind.mandatory {
+  background: #f8e4cc;
+  color: #8a481d;
+}
+.effectKind.automatic {
+  background: #e3eaf3;
+  color: #3d567a;
+}
+.upgradeNoteList small {
+  font-size: 11px;
+  display: block;
+  margin: 7px 0;
+  color: #6b7c64;
+}
+.upgradeNoteList p {
+  font-size: 14px;
+  line-height: 1.8;
+  margin: 8px 0;
+}
+.upgradeNoteList .upgradeExample {
+  color: #536b46;
+  background: #f0f3e9;
+  border-left: 3px solid #adc09b;
+  padding: 8px 12px;
+  font-size: 12px;
+}
+.upgradeMandatoryHelp {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #8a481d;
+}
+.upgradeLoadouts {
+  background: #f6f8ef;
+  border: 1px solid #d3decf;
+  border-radius: 14px;
+  padding: 22px;
+  margin: 22px 0;
+}
+.upgradeLoadouts h3 {
+  margin: 0 0 8px;
+  font-size: 18px;
+}
+.upgradeLoadouts > p {
+  font-size: 12px;
+  color: #667b5d;
+  line-height: 1.8;
+}
+.driverUpgrades {
+  margin-top: 14px;
+  border-top: 1px solid #d6e0cf;
+  padding-top: 12px;
+}
+.driverUpgrades summary {
+  cursor: pointer;
+  font-weight: 700;
+  font-size: 13px;
+}
+.driverUpgrades summary > span {
+  display: inline-block;
+  font-weight: 400;
+  font-size: 11px;
+  margin-left: 10px;
+  color: #698160;
+}
+.selectedUpgrades {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+  margin-top: 14px;
+}
+.selectedUpgrade {
+  background: #fffef5;
+  border: 1px solid #c9d5be;
+  border-radius: 10px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+.selectedUpgrade .upgradeValue {
+  font-size: 22px !important;
+}
+.selectedUpgrade .upgradeHelp {
+  margin-top: auto;
+}
+.upgradeAction > .upgradeHelp {
+  margin-left: 12px;
+}
+.directPlays > p {
+  font-size: 12px;
+  line-height: 1.8;
+  color: #657b59;
+}
+.eventCard > .upgradeHelp {
+  font-size: 10px;
+  padding: 5px;
+  margin-top: 5px;
 }
 .draftPick {
   font-size: 11px;
@@ -2043,8 +2278,17 @@ select:disabled {
   .upgradeMarket {
     gap: 8px;
   }
-  .upgradeCard {
+  .upgradeMarketItem {
     width: calc(50% - 4px);
+  }
+  .upgradeDialogContent {
+    padding: 18px;
+  }
+  .upgradeLoadouts {
+    padding: 16px;
+  }
+  .selectedUpgrades {
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
   }
   .roadGrid {
     grid-template-columns: 1fr 1fr;
@@ -2060,6 +2304,12 @@ select:disabled {
   }
   .card:has(.upgradeMeta) {
     width: 108px;
+  }
+  .upgradeHandItem {
+    flex-basis: 140px;
+  }
+  .upgradeHandItem > .card {
+    width: 100%;
   }
   .upgradeValue {
     font-size: 25px !important;

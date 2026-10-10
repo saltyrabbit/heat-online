@@ -133,13 +133,35 @@ export const EFFECT_LABELS: Record<keyof Effects, string> = {
   direct: "↗ 反应时追加",
   accelerate: "＋ 每次翻牌再+1",
 };
+export function effectLines(u: Upgrade) {
+  return Object.entries(u.effects).map(([k, v]) => {
+    const n = v as number;
+    const text = {
+      cool: `冷却：至多 ${n} 张手牌热量回到引擎区`,
+      slip: `尾流额外 ${n} 格`,
+      reduce: `减压：弃掉至多 ${n} 张手牌压力`,
+      salvage: `回收：至多 ${n} 张弃牌洗入抽牌堆`,
+      heat: `必须付 ${n} 张热量：引擎区 → 弃牌堆`,
+      scrap: `必须弃抽牌堆顶 ${n} 张`,
+      limit: `你的弯道限速 ${n > 0 ? "+" : ""}${n}`,
+      refresh: "补牌前放回牌顶",
+      direct: "反应阶段可额外出此牌，不占挡位张数",
+      accelerate: "每个＋额外 +1 速度",
+    }[k as keyof Effects];
+    const timing =
+      k === "limit"
+        ? "第 7 步 · 自动"
+        : k === "slip"
+          ? "第 6 步 · 可选"
+          : ["heat", "scrap"].includes(k)
+            ? "第 5 步 · 必须"
+            : "第 5 步 · 可选";
+    return { key: k, text, timing };
+  });
+}
 export function effectText(u: Upgrade) {
-  return Object.entries(u.effects)
-    .map(
-      ([k, v]) =>
-        EFFECT_LABELS[k as keyof Effects] +
-        (typeof v === "number" ? (k === "limit" && v > 0 ? "+" : "") + v : ""),
-    )
+  return effectLines(u)
+    .map((e) => e.text)
     .join(" · ");
 }
 export type WeatherEffect = "slip2" | "noSlip" | "cool1" | "noCool";
@@ -225,7 +247,7 @@ export const WEATHERS: Weather[] = [
 export const WEATHER_LABELS: Record<WeatherEffect, string> = {
   slip2: "尾流可额外 +2 格",
   noSlip: "不能从此路段发起尾流",
-  cool1: "反应阶段额外冷却 1",
+  cool1: "反应时可额外将 1 张手牌热量移回引擎区",
   noCool: "此路段禁止所有冷却",
 };
 export type RoadKind =

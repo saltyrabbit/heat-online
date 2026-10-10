@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import type { ActionKind, Card, FlipReveal, RaceAction } from "../lib/game";
 import { upgrade, effectText } from "../lib/modules";
+import { UpgradeHelp } from "./modules-ui";
 import { playerRoundEvents } from "../lib/round-events";
 import { driverStage } from "../lib/round-status";
 
@@ -119,6 +120,7 @@ function EventCards({
             <small title={u ? effectText(u) : undefined}>
               {u && !reveal ? effectText(u) || "升级牌" : note}
             </small>
+            {u && <UpgradeHelp card={card} />}
           </li>
         );
       })}
