@@ -156,6 +156,14 @@ for (let guard = 0; guard < 800 && r.phase !== "finished"; guard++) {
     });
     assert.equal(result.status, 200, JSON.stringify(result));
     r = result.data;
+    if (r.phase === "turn") {
+      const chosen = (r.actions || []).filter((action) => action.round === r.round && action.kind === "played");
+      for (const driver of r.players.filter((p) => !p.rank)) {
+        const snapshots = chosen.filter((action) => action.playerId === driver.id);
+        assert.equal(snapshots.length, 1);
+        assert.ok(snapshots[0].cards.length > 0);
+      }
+    }
     assert.ok(
       r.players.filter((p) => p.id !== r.me).every((p) => p.hand.length === 0),
     );
@@ -214,6 +222,7 @@ console.log(
       "wrong-turn rejection",
       "two-client complete race",
       "live round action and reveal synchronization",
+      "simultaneous chosen-card revelation",
     ],
   }),
 );

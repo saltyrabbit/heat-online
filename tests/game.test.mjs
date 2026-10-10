@@ -145,6 +145,33 @@ test("public round actions show locked status before revealing chosen cards", ()
   assert.ok(!JSON.stringify(actions).includes(p.hand[0].id));
   assert.equal(view(r, q.token).players.find((x) => x.id === p.id).played.length, 0);
 });
+test("all chosen cards reveal together after the last plan, including waiting drivers", () => {
+  const r = controlled(), p = r.players[0], q = r.players[1];
+  const chosenP = p.hand[0], chosenQ = q.hand[1];
+  plan(r, p, 1, [chosenP.id]);
+  assert.ok(!view(r, q.token).actions.some((action) => action.cards?.length));
+  plan(r, q, 1, [chosenQ.id]);
+  assert.equal(r.turn.id, p.id);
+  const snapshots = view(r, p.token).actions.filter((action) => action.kind === "played");
+  assert.deepEqual(snapshots.map((action) => [action.playerId, action.cards.map((card) => card.id)]), [
+    [p.id, [chosenP.id]], [q.id, [chosenQ.id]],
+  ]);
+  react(r, p, "check");
+  react(r, p, "finish");
+  assert.deepEqual(view(r, q.token).actions.find((action) => action.kind === "played" && action.playerId === p.id).cards, [chosenP]);
+});
+test("six drivers reveal their chosen cards together, before five of them have acted", () => {
+  const r = setup(6);
+  const choices = r.players.map((p) => p.hand.find((card) => card.type === "speed" && card.basic));
+  r.players.forEach((p, i) => {
+    plan(r, p, 1, [choices[i].id]);
+    if (i < 5) assert.ok(!view(r, p.token).actions.some((action) => action.kind === "played"));
+  });
+  assert.equal(r.phase, "turn");
+  const snapshots = view(r, r.players[5].token).actions.filter((action) => action.kind === "played");
+  assert.equal(snapshots.length, 6);
+  for (let i = 0; i < 6; i++) assert.deepEqual(snapshots.find((action) => action.playerId === r.players[i].id).cards, [choices[i]]);
+});
 test("round actions retain movement, cooldown, boost, corner checks and turn completion", () => {
   const r = controlled(), p = r.players[0], q = r.players[1];
   plan(r, p, 1, [p.hand[0].id]);

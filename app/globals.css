@@ -501,53 +501,6 @@ footer {
 .phaseSummary p {
   margin-top: 8px;
 }
-.roundActions {
-  border-top: 1px solid var(--border);
-  padding: 16px;
-}
-.roundActionsHeading, .roundDriverHeading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  font-size: 11px;
-}
-.roundActionsHeading small, .roundDriverHeading > span {
-  color: var(--muted);
-  font-size: 9px;
-  white-space: nowrap;
-}
-.roundActionsList {
-  max-height: 300px;
-  overflow-y: auto;
-  margin-top: 12px;
-}
-.roundDriver + .roundDriver {
-  border-top: 1px solid var(--border);
-  padding-top: 12px;
-  margin-top: 12px;
-}
-.roundDriverHeading strong {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.roundDriverHeading i {
-  width: 4px;
-  height: 12px;
-  border-radius: 2px;
-}
-.roundDriver ol {
-  margin: 8px 0 0;
-  padding-left: 16px;
-}
-.roundDriver li, .roundDriver p {
-  font-size: 10px;
-  line-height: 1.7;
-  color: var(--muted);
-}
-.roundDriver li + li { margin-top: 5px; }
-.roundDriver p { margin: 8px 0 0; }
 .lobbyInfo {
   display: flex;
   align-items: center;
@@ -571,6 +524,60 @@ footer {
 .cockpit {
   margin-top: 23px;
   padding: 22px;
+}
+.roundEvents {
+  margin-top: 23px;
+  padding: 22px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--paper);
+}
+.roundEventsHeading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+.roundEventsHeading h2 { font-size: 20px; margin: 8px 0 0; }
+.roundEventsHeading > span { font-size: 11px; text-align: right; }
+.roundEventsHeading > span small { display: block; margin-top: 6px; font-size: 10px; color: var(--muted); }
+.playerEventGrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(265px, 1fr)); gap: 14px; align-items: start; }
+.playerEvents { min-width: 0; border: 1px solid var(--border); border-top: 3px solid; border-radius: 5px; background: #f7f6ef; overflow: hidden; }
+.playerEvents.acting { background: #fffdf7; }
+.playerEventsHeading { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 13px 14px; border-bottom: 1px solid var(--border); }
+.playerEventsHeading > div { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.playerEventsHeading i { width: 6px; height: 16px; border-radius: 2px; flex-shrink: 0; }
+.playerEventsHeading h3 { font-size: 12px; margin: 0; overflow-wrap: anywhere; }
+.playerEventsHeading small { font-size: 9px; color: var(--muted); white-space: nowrap; }
+.playerEventsHeading > span { font-size: 9px; color: var(--muted); white-space: nowrap; }
+.playerEventsHeading .eventActive { color: #b54830; font-weight: 700; }
+.eventTimeline { list-style: none; margin: 0; padding: 14px; max-height: 560px; overflow-y: auto; }
+.timelineEvent { display: flex; gap: 10px; position: relative; padding-bottom: 15px; }
+.timelineEvent:last-child { padding-bottom: 0; }
+.timelineEvent:not(:last-child)::before { content: ""; position: absolute; top: 26px; bottom: 0; left: 12px; width: 1px; background: #d9ddd2; }
+.eventIcon { flex: 0 0 26px; width: 26px; height: 26px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: #e7ebdf; color: var(--ink); }
+.timelineEvent.stress .eventIcon { background: #f3e6be; color: #80632a; }
+.timelineEvent.boost .eventIcon, .timelineEvent.spin .eventIcon, .timelineEvent.stall .eventIcon { background: #eed9cf; color: #ab472f; }
+.timelineEvent.cool .eventIcon { background: #dcebef; color: #347787; }
+.eventContent { flex: 1; min-width: 0; padding-top: 4px; }
+.eventLabel { display: block; font-size: 10px; }
+.eventContent p { margin: 5px 0 0; color: var(--muted); font-size: 10px; line-height: 1.6; }
+.eventEmpty { font-size: 11px; line-height: 1.7; color: var(--muted); margin: 0; padding: 18px 14px; }
+.eventCards { display: flex; gap: 6px; overflow-x: auto; list-style: none; margin: 9px 0 0; padding: 0 0 4px; }
+.eventCard { flex: 0 0 65px; padding: 8px 4px; border: 1px solid #c4ccbc; border-radius: 5px; background: #edf0e3; display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.eventCard.heat { background: #eed9cf; }
+.eventCard.stress { background: #f3e6be; }
+.eventCard.resolved { border-color: var(--ink); box-shadow: inset 0 0 0 1px var(--ink); }
+.eventCard span, .eventCard small { font-size: 8px; white-space: nowrap; }
+.eventCard strong { font-family: "Barlow Condensed", Arial; font-size: 32px; line-height: 1; }
+.eventReveal { margin-top: 8px; }
+.eventReveal > span { color: var(--muted); font-size: 9px; }
+@media (max-width: 760px) {
+  .roundEvents { padding: 16px; }
+  .roundEventsHeading { align-items: flex-start; flex-direction: column; gap: 10px; }
+  .roundEventsHeading > span { text-align: left; }
+  .playerEventGrid { grid-template-columns: minmax(0, 1fr); }
 }
 .cockpitTop {
   display: flex;
@@ -687,69 +694,6 @@ footer {
   font-size: 10px;
   font-weight: 400;
   color: var(--muted);
-}
-.flipReveals {
-  border: 1px solid #cbd0c3;
-  border-radius: 5px;
-  background: #f4f3ea;
-  padding: 14px;
-  margin-bottom: 16px;
-}
-.flipHeading, .flipSummary {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 12px;
-}
-.flipHeading small {
-  color: var(--muted);
-  font-size: 10px;
-  margin-left: 8px;
-}
-.flipRevealList {
-  max-height: 320px;
-  overflow-y: auto;
-}
-.flipReveal {
-  margin-top: 14px;
-}
-.flipSummary {
-  font-size: 11px;
-}
-.flipSummary > span {
-  white-space: nowrap;
-  font-weight: 700;
-}
-.flipCards {
-  display: flex;
-  gap: 8px;
-  overflow-x: auto;
-  list-style: none;
-  margin: 9px 0 0;
-  padding: 0 0 4px;
-}
-.flipCard {
-  flex: 0 0 78px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 6px;
-  padding: 9px 5px;
-  border: 1px solid #c4ccbc;
-  border-radius: 5px;
-  background: #edf0e3;
-}
-.flipCard.heat { background: #eed9cf; }
-.flipCard.stress { background: #f3e6be; }
-.flipCard > span, .flipCard small { font-size: 9px; }
-.flipCard strong {
-  font-family: "Barlow Condensed", Arial;
-  font-size: 36px;
-  line-height: 1;
-}
-.flipCard:last-child {
-  border-color: var(--ink);
 }
 .handHeading {
   display: flex;
@@ -869,11 +813,7 @@ footer {
   color: #c3432f;
   font-weight: 700;
 }
-.revealed {
-  font-size: 11px;
-  color: var(--muted);
-  padding-top: 10px;
-}
+
 .bottomGrid {
   display: grid;
   grid-template-columns: minmax(0, 2.4fr) minmax(280px, 1fr);

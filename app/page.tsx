@@ -4,6 +4,7 @@ import { crossed, type Card, type FlipReveal, type RaceAction } from "../lib/gam
 import { getTrack, TRACK_OPTIONS, type TrackId } from "../lib/tracks";
 import { compareCars, innerLane } from "../lib/track-geometry";
 import { Circuit } from "./circuit";
+import { RoundEvents } from "./round-events";
 type P = {
   id: string;
   name: string;
@@ -95,7 +96,6 @@ export default function Home() {
   const track = getTrack(r ? r.trackId : trackId);
   const me = r?.players.find((p) => p.id === r.me);
   const active = r?.turn?.id === r?.me;
-  const flipReveals = (r?.reveals || []).filter((event) => event.round === r?.round).slice().reverse();
   const sorted = r
     ? [...r.players].sort(
         (a, b) => (a.rank || 99) - (b.rank || 99) || compareCars(track, a, b),
@@ -582,33 +582,9 @@ export default function Home() {
                     </p>
                   </div>
                 )}
-                {r.phase !== "lobby" && (
-                  <section className="roundActions" aria-label="其他玩家本回合行动">
-                    <div className="roundActionsHeading">
-                      <strong>本回合行动</strong>
-                      <small>第 {r.round} 回合 · {connected ? "实时同步" : "等待重连"}</small>
-                    </div>
-                    <div className="roundActionsList" aria-live="polite">
-                      {sorted.filter((p) => p.id !== r.me).map((p) => {
-                        const actions = (r.actions || []).filter((action) => action.round === r.round && action.playerId === p.id);
-                        const status = p.rank ? "已完赛" : r.phase === "plan" ? p.plan ? "已锁定选牌" : "选牌中" : r.turn?.id === p.id ? "行动中" : r.queue?.includes(p.id) ? "等待行动" : "本回合已结束";
-                        return (
-                          <div className="roundDriver" key={p.id}>
-                            <div className="roundDriverHeading">
-                              <strong><i style={{background:p.color}} />{p.name}</strong>
-                              <span>{status}</span>
-                            </div>
-                            {actions.length ? (
-                              <ol>{actions.map((action) => <li key={action.id}>{action.text}</li>)}</ol>
-                            ) : <p>{r.phase === "plan" ? "等待选牌" : "暂无行动记录"}</p>}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </section>
-                )}
               </aside>
             </div>
+            {r.phase !== "lobby" && <RoundEvents room={r} connected={connected}/>}
             {r.phase === "lobby" ? (
               <section className="lobbyInfo">
                 <span className="infoIcon">↗</span>
@@ -803,32 +779,6 @@ export default function Home() {
                       <strong>{me.engine}<small>张</small></strong>
                     </div>
                   </div>
-                  {flipReveals.length > 0 && (
-                    <section className="flipReveals" aria-label="最近翻牌" aria-live="polite">
-                      <div className="flipHeading">
-                        <span>本回合翻牌 <small>保留至下一回合</small></span>
-                      </div>
-                      <div className="flipRevealList">
-                      {flipReveals.map((event) => (
-                        <div className="flipReveal" key={event.id}>
-                          <div className="flipSummary">
-                            <strong>{r.players.find((p) => p.id === event.playerId)?.name || "车手"} · {event.kind === "stress" ? "压力翻牌" : "加速翻牌"}</strong>
-                            <span>速度 +{event.value}</span>
-                          </div>
-                          <ol className="flipCards" aria-label="按翻牌顺序">
-                            {event.cards.map((card, index) => (
-                              <li className={`flipCard ${card.type}`} key={`${event.id}:${index}`}>
-                                <span>{card.type === "heat" ? "热量" : card.type === "stress" ? "压力" : card.basic ? "基础速度" : "升级速度"}</span>
-                                <strong>{card.type === "heat" ? "♨" : card.type === "stress" ? "?" : card.value}</strong>
-                                <small>{index === event.cards.length - 1 ? "计入速度" : "跳过 · 弃牌"}</small>
-                              </li>
-                            ))}
-                          </ol>
-                        </div>
-                      ))}
-                      </div>
-                    </section>
-                  )}
                   <div className="handHeading">
                     <span>
                       你的手牌 <small>{me.handCount} 张</small>
@@ -863,23 +813,6 @@ export default function Home() {
                       />
                     ))}
                   </div>
-                  {active && me.played.length > 0 && (
-                    <div className="revealed">
-                      本回合已打出：
-                      {me.played
-                        .map((c) =>
-                          c.type === "stress"
-                            ? "压力"
-                            : c.type === "heat"
-                              ? "热量"
-                              : c.value,
-                        )
-                        .join(" / ")}
-                      {r.turn.stress.length
-                        ? `　压力翻牌：${r.turn.stress.join(" + ")}`
-                        : ""}
-                    </div>
-                  )}
                 </section>
               )
             )}
