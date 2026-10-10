@@ -790,7 +790,7 @@ export default function Home() {
                       <strong>{me.discardCount}<small>张</small></strong>
                     </div>
                     <div className="pileCount" title="引擎区可用的热量卡">
-                      <span>热量卡</span>
+                      <span>引擎区</span>
                       <strong>{me.engine}<small>张</small></strong>
                     </div>
                   </div>
