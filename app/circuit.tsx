@@ -20,6 +20,40 @@ type Car = {
   lane: number;
   rank?: number | null;
 };
+const SECTOR_STYLES = {
+  weather: {
+    label: "天气路段",
+    legend: "蓝色斜纹：天气",
+    fill: "#517ea7",
+    ink: "#a5cdec",
+    edge: "#6e97c4",
+    text: "#265c85",
+    background: "#edf6ff",
+  },
+  slip: {
+    label: "尾流额外 +1",
+    legend: "紫色斜纹：尾流额外 +1",
+    fill: "#75638f",
+    ink: "#c6b3e6",
+    edge: "#a38ac9",
+    text: "#61428b",
+    background: "#f3edff",
+  },
+  freeBoost: {
+    label: "加速免热量",
+    legend: "橙色点纹：加速免热量",
+    fill: "#876637",
+    ink: "#f2cf88",
+    edge: "#d3a44b",
+    text: "#81581e",
+    background: "#fff5df",
+  },
+} as const;
+function sectorStyle(kind?: Road["kind"]) {
+  return kind && kind in SECTOR_STYLES
+    ? SECTOR_STYLES[kind as keyof typeof SECTOR_STYLES]
+    : undefined;
+}
 export function Circuit({
   track,
   r,
@@ -38,12 +72,15 @@ export function Circuit({
     { id: "c", name: "03", color: "#f0c34b", pos: track.length - 3, lane: 0 },
   ];
   const start = point(-0.5);
-  const weatherRoads =
-    r?.roads?.filter((road) => road.kind === "weather") || [];
+  const effectRoads = r?.roads?.filter((road) => sectorStyle(road.kind)) || [];
+  const legendKinds = (
+    Object.keys(SECTOR_STYLES) as (keyof typeof SECTOR_STYLES)[]
+  ).filter((kind) => effectRoads.some((road) => road.kind === kind));
+  const height = r?.roads?.length ? 510 : 475;
   return (
     <svg
       className={"circuit " + (large ? "large" : "")}
-      viewBox="0 0 840 475"
+      viewBox={`0 0 840 ${height}`}
       role="img"
       aria-label={`${track.name}赛道，${track.length}格双车道，绿线逐格标明几何内侧，反向弯会换侧，同格时优先，弯道限速${track.corners
         .map((c) => {
@@ -55,19 +92,19 @@ export function Circuit({
         })
         .join("、")}${
         r?.roads?.length
-          ? `。蓝色底纹标出天气路段：${
-              weatherRoads.length
-                ? weatherRoads
+          ? `。有效果的路段用底纹标出：${
+              effectRoads.length
+                ? effectRoads
                     .map((road) => {
                       const i = track.corners.findIndex(
                         (c) => c.at === road.at,
                       );
                       const end =
                         track.corners[(i + 1) % track.corners.length].at;
-                      return `${i + 1} 号，从 ${road.at} 格起到 ${end} 格弯道线前`;
+                      return `${i + 1} 号${sectorStyle(road.kind)!.label}，从 ${road.at} 格起到 ${end} 格弯道线前`;
                     })
                     .join("；")
-                : "本场无天气标记"
+                : "本场无路段效果标记"
             }`
           : ""
       }`}
@@ -85,19 +122,39 @@ export function Circuit({
           <rect width="4" height="4" fill="white" />
           <rect x="4" y="4" width="4" height="4" fill="white" />
         </pattern>
-        <pattern
-          id="weatherHatch"
-          width="8"
-          height="8"
-          patternUnits="userSpaceOnUse"
-          patternTransform="rotate(45)"
-        >
-          <rect width="8" height="8" fill="#517ea7" />
-          <line x1="0" y1="0" x2="0" y2="8" stroke="#a5cdec" strokeWidth="2" />
-        </pattern>
+        {Object.entries(SECTOR_STYLES).map(([kind, style]) => (
+          <pattern
+            key={kind}
+            id={`sector-${kind}`}
+            width="8"
+            height="8"
+            patternUnits="userSpaceOnUse"
+            patternTransform={
+              kind === "weather"
+                ? "rotate(45)"
+                : kind === "slip"
+                  ? "rotate(-45)"
+                  : undefined
+            }
+          >
+            <rect width="8" height="8" fill={style.fill} />
+            {kind === "freeBoost" ? (
+              <circle cx="4" cy="4" r="1.7" fill={style.ink} />
+            ) : (
+              <line
+                x1="0"
+                y1="0"
+                x2="0"
+                y2="8"
+                stroke={style.ink}
+                strokeWidth="2"
+              />
+            )}
+          </pattern>
+        ))}
       </defs>
-      <rect width="840" height="475" fill="#e7ecdf" />
-      <rect width="840" height="475" fill="url(#grass)" />
+      <rect width="840" height={height} fill="#e7ecdf" />
+      <rect width="840" height={height} fill="url(#grass)" />
       <path d={path} fill="none" stroke="#fffaf0" strokeWidth="56" />
       <path
         d={path}
@@ -109,20 +166,23 @@ export function Circuit({
       <path d={path} fill="none" stroke="#424d4b" strokeWidth="40" />
       {r?.roads &&
         Array.from({ length: track.length }, (_, i) => {
-          if (sector(r, i, track)?.kind !== "weather") return null;
+          const road = sector(r, i, track);
+          if (!sectorStyle(road?.kind)) return null;
           const points = Array.from({ length: 5 }, (_, j) =>
             point(i - 0.5 + j / 4),
           );
           return (
             <path
-              key={`weather-fill-${i}`}
-              data-weather-cell={i}
+              key={`sector-fill-${i}`}
+              data-weather-cell={road!.kind === "weather" ? i : undefined}
+              data-sector-cell={i}
+              data-sector-kind={road!.kind}
               aria-hidden="true"
               d={points
                 .map((p, j) => `${j ? "L" : "M"}${p.x} ${p.y}`)
                 .join(" ")}
               fill="none"
-              stroke="url(#weatherHatch)"
+              stroke={`url(#sector-${road!.kind})`}
               strokeWidth="38"
               opacity=".72"
             />
@@ -171,8 +231,8 @@ export function Circuit({
       {r?.roads &&
         Array.from({ length: track.length }, (_, i) => {
           const road = sector(r, i, track);
-          if (!road || !["slip", "freeBoost", "weather"].includes(road.kind))
-            return null;
+          const style = sectorStyle(road?.kind);
+          if (!road || !style) return null;
           const a = point(i - 0.5, -23),
             b = point(i + 0.5, -23);
           return (
@@ -180,13 +240,7 @@ export function Circuit({
               aria-hidden="true"
               key={`road-${i}`}
               d={`M${a.x} ${a.y} L${b.x} ${b.y}`}
-              stroke={
-                road.kind === "weather"
-                  ? "#6e97c4"
-                  : road.kind === "slip"
-                    ? "#9180b6"
-                    : "#7aaa67"
-              }
+              stroke={style.edge}
               strokeWidth="5"
               opacity=".85"
             >
@@ -202,14 +256,9 @@ export function Circuit({
         const limit =
           c.limit +
           (road?.kind === "limitUp" ? 1 : road?.kind === "limitDown" ? -1 : 0);
-        const captionX =
-          road?.kind === "weather"
-            ? Math.min(745, Math.max(95, label.x))
-            : label.x;
-        const captionY =
-          road?.kind === "weather" && label.y > 410
-            ? label.y - 32
-            : label.y + 32;
+        const style = sectorStyle(road?.kind);
+        const captionX = style ? Math.min(745, Math.max(95, label.x)) : label.x;
+        const captionY = style && label.y > 410 ? label.y - 32 : label.y + 32;
         return (
           <g key={c.at}>
             {road && <title>{`${i + 1} 号：${ROAD_LABELS[road.kind]}`}</title>}
@@ -238,27 +287,27 @@ export function Circuit({
             >
               {limit}
             </text>
-            {road?.kind === "weather" && (
+            {style && (
               <rect
-                x={captionX - 60}
+                x={captionX - 72}
                 y={captionY - 15}
-                width="120"
+                width="144"
                 height="23"
                 rx="7"
-                fill="#edf6ff"
-                stroke="#6097c6"
+                fill={style.background}
+                stroke={style.edge}
               />
             )}
             <text
               x={captionX}
               y={captionY}
               textAnchor="middle"
-              fill={road?.kind === "weather" ? "#265c85" : "#6d756b"}
-              fontSize={road?.kind === "weather" ? "13" : "10"}
-              fontWeight={road?.kind === "weather" ? "700" : "400"}
+              fill={style ? style.text : "#6d756b"}
+              fontSize={style ? "13" : "10"}
+              fontWeight={style ? "700" : "400"}
             >
-              {road?.kind === "weather"
-                ? `☁ ${i + 1} 号天气路段`
+              {style
+                ? `${road!.kind === "slip" ? "⇢" : ROAD_ICONS[road!.kind]} ${i + 1} 号${style.label}`
                 : road
                   ? `${i + 1} · ${ROAD_ICONS[road.kind]}`
                   : `弯道 ${i + 1}`}
@@ -349,35 +398,34 @@ export function Circuit({
         </text>
       </g>
       {r?.roads?.length ? (
-        <g
-          aria-label={
-            weatherRoads.length ? "蓝色斜纹是天气路段" : "本场无天气路段"
-          }
-        >
-          {weatherRoads.length > 0 && (
-            <rect
-              x="25"
-              y="438"
-              width="15"
-              height="12"
-              rx="2"
-              fill="url(#weatherHatch)"
-            />
+        <g aria-label="路段效果图例">
+          {legendKinds.map((kind, i) => (
+            <g key={kind} transform={`translate(${25 + i * 260} 478)`}>
+              <rect
+                width="15"
+                height="12"
+                rx="2"
+                fill={`url(#sector-${kind})`}
+              />
+              <text
+                x="22"
+                y="10"
+                fontSize="12"
+                fill={SECTOR_STYLES[kind].text}
+                fontWeight="700"
+              >
+                {SECTOR_STYLES[kind].legend}
+              </text>
+            </g>
+          ))}
+          {!legendKinds.length && (
+            <text x="25" y="488" fontSize="12" fill="#2c628b" fontWeight="700">
+              本场路况仅在弯道生效，无路段效果
+            </text>
           )}
-          <text
-            x={weatherRoads.length ? 47 : 25}
-            y="448"
-            fontSize="12"
-            fill="#2c628b"
-            fontWeight="700"
-          >
-            {weatherRoads.length
-              ? "蓝色斜纹＝天气路段 · 天气的路段效果仅此处生效"
-              : "本场无天气路段（未抽到 ☁ 天气标记）"}
-          </text>
         </g>
       ) : null}
-      <text x="25" y="465" fontSize="11" fill="#416f5a">
+      <text x="25" y={height - 10} fontSize="11" fill="#416f5a">
         绿线＝几何内侧（同格优先，反向弯换侧） · 黄线＝弯线
       </text>
     </svg>
