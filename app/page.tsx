@@ -8,6 +8,7 @@ import { RoundEvents } from "./round-events";
 import { RoundFlow } from "./round-flow";
 import { driverStage, isDiscarding } from "../lib/round-status";
 import { createRequestId } from "../lib/request-id";
+const basePath = process.env.NEXT_PUBLIC_HEAT_BASE_PATH || "";
 type P = {
   id: string;
   name: string;
@@ -130,7 +131,7 @@ export default function Home() {
   async function refresh(c = currentCode.current) {
     if (!c) return;
     try {
-      const res = await fetch(`/api/rooms?code=${encodeURIComponent(c)}`);
+      const res = await fetch(`${basePath}/api/rooms?code=${encodeURIComponent(c)}`);
       const data = (await res.json()) as R & {
         error: string;
         refresh?: boolean;
@@ -165,7 +166,7 @@ export default function Home() {
     try {
       const requestId = createRequestId();
       for (let attempt = 0; attempt < 3; attempt++) {
-        const res = await fetch("/api/rooms", {
+        const res = await fetch(`${basePath}/api/rooms`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -209,7 +210,7 @@ export default function Home() {
     );
   }
   async function invite() {
-    const url = `${location.origin}/?room=${r!.code}`;
+    const url = `${location.origin}${basePath}/?room=${r!.code}`;
     try {
       await navigator.clipboard.writeText(url);
       setNotice("邀请链接已复制");
@@ -255,7 +256,7 @@ export default function Home() {
       <header className="topbar">
         <a
           className="brand"
-          href="/"
+          href={`${basePath}/`}
           onClick={(e) => {
             if (r) e.preventDefault();
           }}
@@ -995,7 +996,7 @@ export default function Home() {
             <div className="ruleDownloads">
               <a
                 className="outline"
-                href="/heat-rules-zh.pdf"
+                href={`${basePath}/heat-rules-zh.pdf`}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -1003,7 +1004,7 @@ export default function Home() {
               </a>
               <a
                 className="quiet"
-                href="/heat-rules-audit-zh.pdf"
+                href={`${basePath}/heat-rules-audit-zh.pdf`}
                 target="_blank"
                 rel="noreferrer"
               >

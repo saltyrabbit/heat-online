@@ -7,7 +7,7 @@ if [[ -n "$(git status --porcelain --untracked-files=normal)" ]]; then
   exit 1
 fi
 release_sha=$(git rev-parse HEAD)
-npm run build:node
+HEAT_BASE_PATH=/heat npm run build:node
 package_dir=$(mktemp -d)
 trap 'rm -rf "$package_dir"' EXIT
 git archive HEAD | tar -x -C "$package_dir"

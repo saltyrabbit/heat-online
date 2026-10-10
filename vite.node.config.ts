@@ -5,6 +5,7 @@ import { readFileSync } from "node:fs";
 import { sites } from "./build/sites-vite-plugin";
 
 export default defineConfig({
+  define: { "process.env.NEXT_PUBLIC_HEAT_BASE_PATH": JSON.stringify(process.env.HEAT_BASE_PATH || "") },
   plugins: [
     {
       name: "heat-node-room-store", enforce: "pre",

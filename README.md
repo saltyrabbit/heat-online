@@ -4,7 +4,7 @@
 
 线上入口：https://heat-race-jwx-1008.bestpaper-55555.chatgpt.site
 
-ParrotVPN 公网入口：http://52.76.213.199/ （此入口的房间与 Sites 独立）。
+ParrotVPN 公网入口：https://52.76.213.199/heat/ （此入口的房间与 Sites 独立）。
 
 ## 开始比赛
 
@@ -75,11 +75,11 @@ npm run start:node
 # 本机已配置 SSH Host ParrotVPN，源码提交后部署
 bash scripts/deploy-parrot.sh ParrotVPN
 # 验证公网完整比赛
-HEAT_TEST_URL=http://52.76.213.199 HEAT_TEST_TRACK=italy HEAT_TEST_FORMAL=1 node tests/network.test.mjs
+HEAT_TEST_URL=https://52.76.213.199/heat HEAT_TEST_TRACK=italy HEAT_TEST_FORMAL=1 node tests/network.test.mjs
 node --test tests/node-store.test.mjs tests/request-id.test.mjs
 ```
 
-远端源码与构建在 `/srv/heat-online/releases/<Git SHA>`，当前版本链接为 `/srv/heat-online/current`，比赛数据库在 `/srv/heat-online/data/heat.sqlite`。容器 `heat-online` 仅绑定 `127.0.0.1:18766`，通过已有 Nginx 的 HTTP 80 入口提供服务；保留 ZVal 的 HTTPS 443 服务和 HTTP ACME 验证路径。容器使用非 root 用户、只读根目录、512 MB 内存上限、日志轮转和 `unless-stopped` 自动重启。
+远端源码与构建在 `/srv/heat-online/releases/<Git SHA>`，当前版本链接为 `/srv/heat-online/current`，比赛数据库在 `/srv/heat-online/data/heat.sqlite`。容器 `heat-online` 仅绑定 `127.0.0.1:18766`，通过已有 Nginx 的 HTTPS `/heat/` 路径提供服务，复用公网 IP 证书；HTTP 80 跳转到此入口，保留 ZVal 的 HTTPS 根路径服务和 HTTP ACME 验证路径。容器使用非 root 用户、只读根目录、512 MB 内存上限、日志轮转和 `unless-stopped` 自动重启。
 
 ```sh
 ssh ParrotVPN 'sudo docker stats --no-stream heat-online'
@@ -89,7 +89,7 @@ ssh ParrotVPN 'sudo docker restart heat-online'
 ssh ParrotVPN "sudo docker exec heat-online node --input-type=module -e 'import {DatabaseSync} from \"node:sqlite\"; new DatabaseSync(\"/data/heat.sqlite\").prepare(\"VACUUM INTO ?\").run(\"/data/heat-backup.sqlite\");'"
 ```
 
-浏览器通过 HTTP 公网 IP 使用 `getRandomValues` 生成请求标识，兼容不提供 `randomUUID` 的非安全上下文。刷新或服务重启后，只要浏览器身份 cookie 仍在且房间未过期，即可恢复座位。首次部署不会复制 Sites 上已有比赛。
+若自行改用 HTTP 公网 IP，浏览器使用 `getRandomValues` 生成请求标识，兼容不提供 `randomUUID` 的非安全上下文。刷新或服务重启后，只要浏览器身份 cookie 仍在且房间未过期，即可恢复座位。首次部署不会复制 Sites 上已有比赛。
 
 ## 程序结构
 
@@ -118,3 +118,5 @@ ssh ParrotVPN "sudo docker exec heat-online node --input-type=module -e 'import 
 测试结论限于覆盖的基础规则场景；不包含官方高级模块。数字版动态生成打滑压力牌，不模拟实体盒中的储备牌总量。几何内侧优先属于用户指定的自定义规则，不纳入与官方 Race Line 完全一致的结论。详细范围见测试报告。
 
 2026-10-10：76 项自动测试通过，新增异步收尾交接、多位车手任意顺序收尾、回合屏障、机器人接管、旧房间迁移与阶段高亮测试；双客户端完整比赛验证了并行行动、版本冲突重试和手牌隐私。异步收尾与几何内侧优先均为本版的自定义规则。
+
+2026-10-10 ParrotVPN 验证：新增 4 项 Node 数据库 / HTTP 请求标识测试；两名公网客户端完成意大利正式赛（29 回合、195 次操作）。12 并发客户端持续 20 秒共 540 次读取、零失败，端到端响应 P50 144 ms / P95 228 ms；并行运行比赛测试时容器约 69 MiB，整机约 407 MiB 可用。这是小规模测试，不作为最大承载人数的保证。
