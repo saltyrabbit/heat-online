@@ -5,6 +5,7 @@ import { getTrack, TRACK_OPTIONS, type TrackId } from "../lib/tracks";
 import { compareCars, innerLane } from "../lib/track-geometry";
 import { Circuit } from "./circuit";
 import { RoundEvents } from "./round-events";
+import { RoundFlow } from "./round-flow";
 type P = {
   id: string;
   name: string;
@@ -584,6 +585,7 @@ export default function Home() {
                 )}
               </aside>
             </div>
+            <RoundFlow room={r}/>
             {r.phase !== "lobby" && <RoundEvents room={r} connected={connected}/>}
             {r.phase === "lobby" ? (
               <section className="lobbyInfo">
@@ -898,6 +900,7 @@ export default function Home() {
             </div>
           </>
         )}
+        {!r && <RoundFlow/>}
       </main>
       <footer>
         <span>HEAT · CLUB RACING</span>
@@ -921,6 +924,7 @@ export default function Home() {
             </button>
             <div className="eyebrow">QUICK START / 发车指南</div>
             <h2 id="helpTitle">快，也要过得了弯。</h2>
+            <RoundFlow compact/>
             <ol>
               <li>
                 <b>同时换挡并选牌。</b>

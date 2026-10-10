@@ -1138,3 +1138,62 @@ select:disabled { opacity: .75; }
 .innerDot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; background: #75daba; border: 1px solid #387e68; margin-right: 4px; }
 
 .heroMapLegend { padding: 10px 16px; font-size: 12px; line-height: 1.5; color: #416f5a; background: #f7faf1; border-top: 1px solid #d5dccf; }
+
+.roundFlow { margin-top: 24px; padding: 22px; background: var(--paper); border: 1px solid var(--border); border-radius: 8px; min-width: 0; }
+.landing > .roundFlow { grid-column: 1 / -1; width: 100%; margin-top: 0; }
+.flowHeading { display: flex; align-items: center; justify-content: space-between; gap: 16px; margin-bottom: 20px; }
+.flowHeading h2 { font-size: 20px; margin: 7px 0 0; }
+.flowStatus { font-size: 12px; line-height: 1.6; color: #66766b; background: #f0f1e8; padding: 8px 12px; border-radius: 5px; }
+.flowStatus.live { color: #285743; background: #e6f3e8; }
+.flowGroups { display: grid; grid-template-columns: 2fr 5fr 2fr; gap: 18px; }
+.flowGroup { min-width: 0; --flow-color: #547c6d; }
+.flowGroup.react { --flow-color: #b9692b; }
+.flowGroup.discard { --flow-color: #547a91; }
+.flowGroupHeading { display: flex; flex-direction: column; gap: 6px; border-top: 3px solid var(--flow-color); padding: 11px 0; }
+.flowGroupHeading strong { font-size: 13px; color: var(--flow-color); }
+.flowGroupHeading small { font-size: 10px; line-height: 1.6; color: #657368; }
+.roundFlow .flowSteps { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; padding: 0; margin: 0; list-style: none; }
+.roundFlow .react .flowSteps { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+.roundFlow .flowStep { position: relative; margin: 0; padding: 12px 9px; border: 1px solid #dfdfd3; border-radius: 5px; background: #f8f7f0; color: var(--ink); min-width: 0; line-height: 1.5; }
+.flowGroup.current .flowStep { background: #fff4e7; border-color: #d6ae79; }
+.flowGroup.plan.current .flowStep { background: #edf6ec; border-color: #a3c7a9; }
+.flowGroup.discard.current .flowStep { background: #eef5f8; border-color: #a6c3d3; }
+.flowStepTop { display: flex; align-items: center; flex-wrap: wrap; gap: 5px; color: var(--flow-color); }
+.flowNumber { display: grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; background: var(--flow-color); color: white; font-size: 12px; flex-shrink: 0; }
+.flowStepTop small { font-size: 9px; color: #6b766b; margin-left: auto; }
+.flowStepTop .required { font-weight: 700; color: var(--flow-color); }
+.flowStep h3 { font-size: 13px; margin: 11px 0 6px; }
+.flowStep p { font-size: 11px; color: #637166; margin: 0; line-height: 1.7; }
+.flowArrow { position: absolute; right: -14px; top: 58px; color: #7d8b7d; z-index: 1; }
+.flowRepeat { display: flex; gap: 8px; align-items: center; justify-content: center; background: #eef1e6; border-radius: 4px; color: #496653; font-size: 12px; padding: 12px; margin-top: 16px; line-height: 1.6; }
+.flowRepeat svg { flex-shrink: 0; }
+.flowTips { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 15px; }
+.flowTips p { font-size: 11px; color: #647064; line-height: 1.8; margin: 0; }
+.flowTips b { display: block; font-size: 12px; color: var(--ink); margin-bottom: 3px; }
+.flowSource { display: inline-block; font-size: 10px; text-decoration: underline; text-underline-offset: 3px; color: #647567; margin-top: 12px; }
+.roundFlow.compact { padding: 16px; }
+.compact .flowHeading { align-items: flex-start; flex-direction: column; gap: 10px; }
+.compact .flowGroups { grid-template-columns: 1fr; gap: 16px; }
+.compact .flowHeading h2 { font-size: 17px; margin-bottom: 0; }
+.compact .flowSteps, .roundFlow.compact .react .flowSteps { grid-template-columns: 1fr; gap: 9px; }
+.compact .flowStep { display: grid; grid-template-columns: 82px 1fr; column-gap: 10px; align-items: center; }
+.compact .flowStepTop { grid-row: 1 / 3; }
+.compact .flowStep h3 { margin: 0 0 3px; }
+.compact .flowArrow { right: 15px; top: auto; bottom: -12px; transform: rotate(90deg); }
+.compact .flowTips { grid-template-columns: 1fr; gap: 10px; }
+@media (max-width: 1100px) {
+  .flowGroups { grid-template-columns: 1fr; gap: 20px; }
+  .flowArrow { right: -12px; }
+  .flowGroup .flowStep:last-child .flowArrow { right: 12px; top: auto; bottom: -16px; transform: rotate(90deg); }
+}
+@media (max-width: 600px) {
+  .roundFlow { padding: 16px; }
+  .flowHeading { flex-direction: column; align-items: flex-start; gap: 12px; }
+  .flowHeading h2 { font-size: 18px; }
+  .roundFlow .flowSteps, .roundFlow .react .flowSteps { grid-template-columns: 1fr; gap: 9px; }
+  .roundFlow .flowStep { display: grid; grid-template-columns: 82px 1fr; column-gap: 10px; align-items: center; }
+  .flowStepTop { grid-row: 1 / 3; }
+  .flowStep h3 { margin: 0 0 3px; }
+  .flowArrow { right: 15px; top: auto; bottom: -12px; transform: rotate(90deg); }
+  .flowTips { grid-template-columns: 1fr; gap: 12px; }
+}
