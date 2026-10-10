@@ -77,6 +77,7 @@ export type Room = {
   version: number;
   reveals?: FlipReveal[];
   actions?: RaceAction[];
+  pendingDiscards?: string[];
 };
 const assert = (ok: unknown, msg: string) => {
   if (!ok) throw new Error(msg);
@@ -136,6 +137,7 @@ export function room(
     players: [p],
     queue: [],
     turn: null,
+    pendingDiscards: [],
     log: ["房间已创建，等待车手。"],
     requests: [],
     version: 0,
@@ -277,6 +279,7 @@ export function cornerCost(
   ).reduce((n, c) => n + Math.max(0, speed - c.limit), 0);
 }
 function newRound(r: Room) {
+  assert(!r.pendingDiscards?.length, "还有车手未完成收尾");
   const finishers = order(r).filter(
     (p) => p.pos >= r.laps * getTrack(r.trackId).length,
   );
@@ -345,7 +348,21 @@ function next(r: Room) {
     );
     return;
   }
+  if (r.pendingDiscards?.length) {
+    r.phase = "turn";
+    return;
+  }
   newRound(r);
+}
+// Old saved rooms used a single discard turn. Release their next driver on
+// the next mutation, while preserving the previous driver's discard decision.
+function migrateCleanup(r: Room) {
+  if (r.phase === "turn" && r.turn?.step === "discard") {
+    const id = r.turn.id;
+    r.pendingDiscards = [...new Set([...(r.pendingDiscards || []), id])];
+    r.queue = r.queue.filter(x => x !== id);
+    next(r);
+  }
 }
 function checkCorners(r: Room, p: Player) {
   const t = r.turn!;
@@ -390,6 +407,7 @@ export function start(r: Room) {
   shuffle(r.players);
   r.reveals = [];
   r.actions = [];
+  r.pendingDiscards = [];
   r.players.forEach((p, i) => {
     p.pos = -Math.floor(i / 2);
     p.lane = (innerLane(getTrack(r.trackId), p.pos) + (i % 2)) % 2;
@@ -459,9 +477,8 @@ export function plan(r: Room, p: Player, gear: number, ids: string[]) {
   }
 }
 export function react(r: Room, p: Player, action: string, ids: string[] = []) {
-  assert(r.phase === "turn" && r.turn?.id === p.id, "请等待你的行动回合");
-  const t = r.turn!;
-  if (t.step === "discard") {
+  migrateCleanup(r);
+  if (r.phase === "turn" && r.pendingDiscards?.includes(p.id)) {
     assert(action === "finish", "当前需要弃牌并结束回合");
     assert(
       Array.isArray(ids) &&
@@ -476,10 +493,12 @@ export function react(r: Room, p: Player, action: string, ids: string[] = []) {
     p.discard.push(...p.played.splice(0));
     refill(p);
     recordAction(r, p, `${p.name} 弃掉 ${ids.length} 张速度牌，补牌至 ${p.hand.length} 张，结束回合。`, {kind: "end"});
-    r.queue.shift();
-    next(r);
+    r.pendingDiscards = r.pendingDiscards.filter(id => id !== p.id);
+    if (!r.turn && !r.queue.length && !r.pendingDiscards.length) newRound(r);
     return;
   }
+  assert(r.phase === "turn" && r.turn?.id === p.id, "请等待你的行动回合");
+  const t = r.turn!;
   if (action === "cool") {
     assert(t.cool > 0, "本回合没有剩余冷却");
     const i = p.hand.findIndex((c) => c.type === "heat");
@@ -511,6 +530,9 @@ export function react(r: Room, p: Player, action: string, ids: string[] = []) {
     }
     checkCorners(r, p);
     recordAction(r, p, `${p.name} 完成弯道检查。`, {kind: "corner"});
+    r.pendingDiscards = [...(r.pendingDiscards || []), p.id];
+    r.queue.shift();
+    next(r);
   } else throw new Error("未知行动");
 }
 function combinations<T>(a: T[], n: number): T[][] {
@@ -564,13 +586,19 @@ export function botPlan(r: Room, p: Player) {
   plan(r, p, choice.gear, choice.ids);
 }
 export function autoBots(r: Room) {
+  migrateCleanup(r);
   for (let guard = 0; guard < 1200; guard++) {
+    for (const id of [...(r.pendingDiscards || [])]) {
+      const driver = r.players.find(p => p.id === id)!;
+      if (driver.bot) react(r, driver, "finish", driver.hand.filter(c => c.type === "speed" && c.value === 0).map(c => c.id));
+    }
     if (r.phase === "plan") {
       for (const p of r.players.filter((p) => p.bot && !p.rank && !p.plan))
         botPlan(r, p);
       if (r.phase === "plan") return;
     }
     if (r.phase === "turn") {
+      if (!r.turn) return;
       const p = r.players.find((p) => p.id === r.turn!.id)!;
       if (!p.bot) return;
       const t = r.turn!;

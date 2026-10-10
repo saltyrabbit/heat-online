@@ -1,11 +1,12 @@
 import { Check, Layers, Shuffle, Zap, Gauge, Snowflake, Plus, Wind, CornerUpRight, TriangleAlert, Flag, CircleCheck } from "lucide-react";
 import type { ActionKind, Card, FlipReveal, RaceAction } from "../lib/game";
 import { playerRoundEvents } from "../lib/round-events";
+import { driverStage } from "../lib/round-status";
 
 type Driver = {id: string; name: string; color: string; bot: boolean; rank: number | null; plan: boolean};
 type EventRoom = {
   round: number; phase: string; me: string; players: Driver[];
-  turn: {id: string} | null; queue?: string[];
+  turn: {id: string; step?: string} | null; queue?: string[]; pendingDiscards?: string[];
   actions?: RaceAction[]; reveals?: FlipReveal[];
 };
 const categories = {
@@ -35,10 +36,8 @@ function EventCards({cards, reveal = false}: {cards: Card[]; reveal?: boolean}) 
 }
 
 function driverStatus(room: EventRoom, player: Driver) {
-  if (player.rank) return "已完赛";
-  if (room.phase === "plan") return player.plan ? "已锁定选牌" : "选牌中";
-  if (room.turn?.id === player.id) return "行动中";
-  return room.queue?.includes(player.id) ? "等待行动" : "本回合已结束";
+  const stage = driverStage(room, player.id);
+  return {finished: "已完赛", plan: "选牌中", locked: "已锁定选牌", discard: "收尾中", react: "行动中", waiting: "等待行动", done: "本回合已结束", lobby: "已就位"}[stage];
 }
 
 export function RoundEvents({room, connected}: {room: EventRoom; connected: boolean}) {

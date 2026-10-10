@@ -295,10 +295,12 @@ test("R14 p6: tailwind crossing corner charges total speed, not tailwind distanc
   q.lane = 1;
   lock(r);
   assert.equal(p.pos, 12);
+  const turn = r.turn;
   react(r, p, "slip");
   assert.equal(p.pos, 14);
   assert.equal(p.engine, 6);
-  assert.equal(r.turn.speed, 1);
+  assert.equal(turn.speed, 1);
+  assert.ok(r.pendingDiscards.includes(p.id));
 });
 test("R15 p6: exact speed limit costs zero; multiple corners pay separately in order", () => {
   const r = setup(),
@@ -427,6 +429,10 @@ test("R22: deterministic randomized races across 4 maps preserve physical occupa
               const p = r.players.find((p) => !p.rank && !p.plan);
               botPlan(r, p);
             } else if (r.phase === "turn") {
+              if (r.pendingDiscards?.length) {
+                react(r, r.players.find(p => p.id === r.pendingDiscards[0]), "finish");
+                continue;
+              }
               const p = r.players.find((p) => p.id === r.turn.id),
                 t = r.turn;
               if (t.step === "discard") react(r, p, "finish");

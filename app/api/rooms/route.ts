@@ -19,11 +19,12 @@ function token(req: Request) {
       ?.match(/(?:^|;\s*)heat_sid=([a-f0-9-]{36})/)?.[1] || crypto.randomUUID()
   );
 }
-function response(data: unknown, status = 200, sid?: string) {
+function response(data: unknown, status = 200, sid?: string, started?: number) {
   return Response.json(data, {
     status,
     headers: {
       "Cache-Control": "no-store",
+      ...(started !== undefined ? {"Server-Timing": `app;dur=${Date.now() - started}`} : {}),
       ...(sid
         ? {
             "Set-Cookie": `heat_sid=${sid}; Path=/; HttpOnly; SameSite=Lax; Max-Age=2592000`,
@@ -51,14 +52,16 @@ export async function GET(req: Request) {
   }
 }
 export async function POST(req: Request) {
+  const started = Date.now();
+  const reply = (data: unknown, status = 200, sid?: string) => response(data, status, sid, started);
   try {
     if (
       req.headers.get("origin") &&
       req.headers.get("origin") !== new URL(req.url).origin
     )
-      return response({ error: "不允许跨站请求" }, 403);
+      return reply({ error: "不允许跨站请求" }, 403);
     if (Number(req.headers.get("content-length")) > 16000)
-      return response({ error: "请求过大" }, 413);
+      return reply({ error: "请求过大" }, 413);
     const b = (await req.json()) as {
       action: string;
       laps: number;
@@ -92,21 +95,21 @@ export async function POST(req: Request) {
           )
           .bind(code, JSON.stringify(r), Date.now() + 7 * 86400000)
           .run();
-        if (result.meta.changes) return response(view(r, sid), 200, sid);
+        if (result.meta.changes) return reply(view(r, sid), 200, sid);
       }
       throw new Error("创建房间失败，请重试");
     }
     const code = String(b.code || "").toUpperCase();
     const row = await read(code);
-    if (!row) return response({ error: "房间不存在或已过期" }, 404);
+    if (!row) return reply({ error: "房间不存在或已过期" }, 404);
     const r: Room = JSON.parse(row.data);
     r.version = row.version;
     if (typeof b.requestId !== "string" || b.requestId.length > 80)
       throw new Error("请求标识无效");
     if (r.requests.includes(b.requestId))
-      return response(view(r, sid), 200, sid);
+      return reply(view(r, sid), 200, sid);
     if (b.action !== "join" && b.version !== row.version)
-      return response({ error: "房间状态已更新，请重试", refresh: true }, 409);
+      return reply({ error: "房间状态已更新，请重试", refresh: true, state: view(r, sid) }, 409);
     let p = r.players.find((p) => p.token === sid);
     if (b.action === "join") {
       if (!p) {
@@ -170,6 +173,7 @@ export async function POST(req: Request) {
         r.phase = "lobby";
         r.turn = null;
         r.queue = [];
+        r.pendingDiscards = [];
         r.round = 0;
         r.log = ["已回到大厅。"];
         for (const p of r.players) {
@@ -200,13 +204,13 @@ export async function POST(req: Request) {
         row.version,
       )
       .run();
-    if (!result.meta.changes)
-      return response(
-        { error: "其他车手刚刚行动，请重试", refresh: true },
-        409,
-      );
-    return response(view(r, sid), 200, sid);
+    if (!result.meta.changes) {
+      const latest = await read(code);
+      const state = latest ? view({...JSON.parse(latest.data), version: latest.version}, sid) : undefined;
+      return reply({ error: "其他车手刚刚行动，请重试", refresh: true, state }, 409);
+    }
+    return reply(view(r, sid), 200, sid);
   } catch (e) {
-    return response({ error: (e as Error).message }, 400);
+    return reply({ error: (e as Error).message }, 400);
   }
 }

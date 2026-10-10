@@ -6,6 +6,7 @@ import { compareCars, innerLane } from "../lib/track-geometry";
 import { Circuit } from "./circuit";
 import { RoundEvents } from "./round-events";
 import { RoundFlow } from "./round-flow";
+import { driverStage, isDiscarding } from "../lib/round-status";
 type P = {
   id: string;
   name: string;
@@ -39,6 +40,7 @@ type R = {
   reveals?: FlipReveal[];
   actions?: RaceAction[];
   queue?: string[];
+  pendingDiscards?: string[];
 };
 function CardButton({
   card,
@@ -94,9 +96,12 @@ export default function Home() {
   const currentCode = useRef("");
   const rRef = useRef<R | null>(null);
   const lastKey = useRef("");
+  const busyRef = useRef(false);
   const track = getTrack(r ? r.trackId : trackId);
   const me = r?.players.find((p) => p.id === r.me);
-  const active = r?.turn?.id === r?.me;
+  const active = !!r?.turn && r.turn.id === r.me;
+  const discarding = !!r && isDiscarding(r, r.me);
+  const myStage = r ? driverStage(r, r.me) : null;
   const sorted = r
     ? [...r.players].sort(
         (a, b) => (a.rank || 99) - (b.rank || 99) || compareCars(track, a, b),
@@ -114,7 +119,7 @@ export default function Home() {
       localStorage.setItem("heat-room", data.code);
     } catch {}
     const mine = data.players.find((p) => p.id === data.me)!;
-    const key = `${data.code}:${data.round}:${data.phase}:${data.turn?.step}:${mine.plan}:${mine.hand.map((c) => c.id).join(",")}`;
+    const key = `${data.code}:${data.round}:${driverStage(data, data.me)}:${mine.hand.map((c) => c.id).join(",")}`;
     if (key !== lastKey.current) {
       setSelected([]);
       if (data.phase === "plan") setGear(mine.gear);
@@ -148,44 +153,53 @@ export default function Home() {
         if (saved) refresh(saved);
       }
     } catch {}
-    const timer = setInterval(() => refresh(), 1700);
+    const timer = setInterval(() => { if (!busyRef.current) refresh(); }, 1700);
     return () => clearInterval(timer);
   }, []);
   async function send(action: string, extra: Record<string, unknown> = {}) {
     if (busy) return;
     setBusy(true);
+    busyRef.current = true;
     setError("");
     try {
-      const res = await fetch("/api/rooms", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          action,
-          code: currentCode.current || code.trim().toUpperCase(),
-          name: name.trim(),
-          laps: laps === 1 ? 1 : getTrack(trackId).laps,
-          trackId,
-          version: rRef.current?.version,
-          requestId: crypto.randomUUID(),
-          ...extra,
-        }),
-      });
-      const data = (await res.json()) as R & {
-        error: string;
-        refresh?: boolean;
-      };
-      if (!res.ok) {
-        if (data.refresh) await refresh();
-        throw new Error(data.error || "操作失败");
+      const requestId = crypto.randomUUID();
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const res = await fetch("/api/rooms", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            action,
+            code: currentCode.current || code.trim().toUpperCase(),
+            name: name.trim(),
+            laps: laps === 1 ? 1 : getTrack(trackId).laps,
+            trackId,
+            version: rRef.current?.version,
+            requestId,
+            ...extra,
+          }),
+        });
+        const data = (await res.json()) as R & {
+          error: string;
+          refresh?: boolean;
+          state?: R;
+        };
+        if (!res.ok) {
+          if (data.state) apply(data.state);
+          else if (data.refresh) await refresh();
+          if (res.status === 409 && action === "react" && attempt < 2) continue;
+          throw new Error(data.error || "操作失败");
+        }
+        try {
+          localStorage.setItem("heat-name", name);
+        } catch {}
+        apply(data);
+        break;
       }
-      try {
-        localStorage.setItem("heat-name", name);
-      } catch {}
-      apply(data);
     } catch (e) {
       setError((e as Error).message);
     } finally {
       setBusy(false);
+      busyRef.current = false;
     }
   }
   function toggle(id: string) {
@@ -484,6 +498,8 @@ export default function Home() {
                       <span className={"ready " + (p.plan ? "yes" : "")}>
                         {p.plan ? "已选牌" : "选牌中"}
                       </span>
+                    ) : isDiscarding(r, p.id) ? (
+                      <span className="ready yes">收尾中</span>
                     ) : r.turn?.id === p.id ? (
                       <span className="ready yes">行动中</span>
                     ) : null}
@@ -574,12 +590,14 @@ export default function Home() {
                         ? "同时选牌"
                         : r.phase === "finished"
                           ? "所有车手已完赛"
-                          : `${r.players.find((p) => p.id === r.turn?.id)?.name || ""} 正在行动`}
+                          : r.turn
+                            ? `${r.players.find((p) => p.id === r.turn?.id)?.name || ""} 正在行动`
+                            : "等待车手完成收尾"}
                     </span>
                     <p>
                       {r.phase === "plan"
                         ? "所有车手确认后，依发车位置逐个行动。"
-                        : "本回合的行动顺序在选牌前确定。"}
+                        : "弯道检查后交接行动；各自收尾，全员完成后进入下一回合。"}
                     </p>
                   </div>
                 )}
@@ -631,11 +649,13 @@ export default function Home() {
                             ? me.plan
                               ? "选牌已锁定，等待其他车手"
                               : "选择挡位，安排这一回合"
-                            : active
-                              ? r.turn.step === "discard"
-                                ? "选择弃牌，然后结束回合"
-                                : "冷却、加速，决定你的极限"
-                              : "等待前方车手行动"}
+                            : discarding
+                              ? "选择弃牌并补牌，其他车手可继续行动"
+                              : active
+                                ? "冷却、加速，决定你的极限"
+                                : myStage === "done"
+                                  ? "本回合已完成，等待下一回合"
+                                  : "等待前方车手行动"}
                       </h2>
                     </div>
                     <div className="metrics">
@@ -649,6 +669,7 @@ export default function Home() {
                       </div>
                     </div>
                   </div>
+                  {busy && <p className="actionSync" role="status">正在同步你的行动…</p>}
                   {r.phase === "plan" && !me.plan && !me.rank && (
                     <div className="planning">
                       <div className="gearBox">
@@ -751,10 +772,10 @@ export default function Home() {
                       </div>
                     </div>
                   )}
-                  {active && r.turn.step === "discard" && (
+                  {discarding && (
                     <div className="planning">
                       <p>
-                        可选弃掉速度牌，为下一回合腾出手牌。压力牌和热量牌必须保留。
+                        可选弃掉速度牌，然后自动补牌。压力牌和热量牌必须保留；你的收尾不会阻塞下一位车手。
                       </p>
                       <button
                         className="primary"
@@ -788,7 +809,7 @@ export default function Home() {
                     <small>
                       {r.phase === "plan" && !me.plan
                         ? "点击选牌"
-                        : active && r.turn.step === "discard"
+                        : discarding
                           ? "点击选择弃牌"
                           : ""}
                     </small>
@@ -806,8 +827,7 @@ export default function Home() {
                             (r.phase === "plan" &&
                               !me.plan &&
                               c.type !== "heat") ||
-                            (active &&
-                              r.turn.step === "discard" &&
+                            (discarding &&
                               c.type === "speed")
                           )
                         }
@@ -950,7 +970,7 @@ export default function Home() {
               <li>
                 <b>弃牌，补足手牌。</b>
                 只能主动弃速度牌；冷却才能移走手牌热量。补到 7
-                张后轮到下一位车手，牌库空则洗入弃牌堆。
+                张。下一位车手在你完成弯道检查后即可行动；全员收尾后再进入下一回合。牌库空则洗入弃牌堆。
               </li>
               <li>
                 <b>冲线决定名次。</b>

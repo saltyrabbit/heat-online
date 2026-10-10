@@ -130,6 +130,8 @@ assert.equal(
 );
 const ids = [(await get(0, code)).data.me, (await get(1, code)).data.me];
 let operations = 0;
+let overlapVerified = false;
+let wrongTurnVerified = false;
 for (let guard = 0; guard < 800 && r.phase !== "finished"; guard++) {
   let i;
   if (r.phase === "plan") {
@@ -168,10 +170,38 @@ for (let guard = 0; guard < 800 && r.phase !== "finished"; guard++) {
       r.players.filter((p) => p.id !== r.me).every((p) => p.hand.length === 0),
     );
   } else if (r.phase === "turn") {
-    i = ids.indexOf(r.turn.id);
+    if (!overlapVerified && r.turn && r.pendingDiscards?.length) {
+      const reacting = ids.indexOf(r.turn.id);
+      const finishing = ids.indexOf(r.pendingDiscards[0]);
+      assert.notEqual(reacting, finishing);
+      const kinds = ["check", "finish"];
+      const clients = [reacting, finishing];
+      const requestIds = [crypto.randomUUID(), crypto.randomUUID()];
+      const simultaneous = await Promise.all(clients.map((client, n) => call(client, {
+        action:"react", kind:kinds[n], cards:[], code, version:r.version, requestId:requestIds[n],
+      })));
+      assert.deepEqual(simultaneous.map(v => v.status).sort(), [200,409]);
+      const failed = simultaneous.findIndex(v => v.status === 409);
+      const conflict = simultaneous[failed];
+      assert.ok(conflict.data.state, "conflicts include fresh state; no extra GET round trip");
+      assert.ok(conflict.data.state.players.filter(p => p.id !== conflict.data.state.me).every(p => p.hand.length === 0));
+      i = clients[failed];
+      const retried = await call(i, {
+        action:"react", kind:kinds[failed], cards:[], code,
+        version:conflict.data.state.version, requestId:requestIds[failed],
+      });
+      assert.equal(retried.status,200,JSON.stringify(retried));
+      r = retried.data;
+      assert.equal(r.turn,null);
+      assert.deepEqual(r.pendingDiscards,[ids[reacting]]);
+      overlapVerified = true;
+      operations++;
+    } else {
+    i = ids.indexOf(r.turn?.id || r.pendingDiscards?.at(-1));
+    assert.ok(i >= 0, "an acting or finishing client must exist");
     r = (await get(i, code)).data;
     const p = r.players.find((p) => p.id === r.me);
-    if (operations === 0) {
+    if (!wrongTurnVerified && r.turn) {
       const attacker = await call(1 - i, {
         action: "react",
         kind: "boost",
@@ -179,10 +209,10 @@ for (let guard = 0; guard < 800 && r.phase !== "finished"; guard++) {
         version: r.version,
       });
       assert.equal(attacker.status, 400);
-      operations++;
+      wrongTurnVerified = true;
     }
     const kind =
-      r.turn.step === "discard"
+      !r.turn || r.pendingDiscards?.includes(r.me)
         ? "finish"
         : r.turn.cool && p.hand.some((c) => c.type === "heat")
           ? "cool"
@@ -196,6 +226,7 @@ for (let guard = 0; guard < 800 && r.phase !== "finished"; guard++) {
     });
     assert.equal(result.status, 200, JSON.stringify(result));
     r = result.data;
+    }
   } else throw Error("unexpected phase " + r.phase);
   const observer = (await get(1 - i, code)).data;
   assert.equal(observer.version, r.version);
@@ -205,6 +236,8 @@ for (let guard = 0; guard < 800 && r.phase !== "finished"; guard++) {
   operations++;
 }
 assert.equal(r.phase, "finished");
+assert.ok(overlapVerified);
+assert.ok(wrongTurnVerified);
 assert.deepEqual(r.players.map((p) => p.rank).sort(), [1, 2]);
 assert.equal((await get(0, code)).data.me, ids[0]);
 assert.equal((await get(1, code)).data.me, ids[1]);
@@ -223,6 +256,8 @@ console.log(
       "two-client complete race",
       "live round action and reveal synchronization",
       "simultaneous chosen-card revelation",
+      "parallel discard and next-driver movement",
+      "concurrent action retry with private fresh state",
     ],
   }),
 );

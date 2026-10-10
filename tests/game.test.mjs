@@ -216,7 +216,8 @@ test("cooldown recycles hand heat, corner charges full speed including boost", (
   assert.throws(() => react(r, p, "boost"));
   react(r, p, "check");
   assert.equal(p.engine, 3);
-  assert.equal(r.turn.step, "discard");
+  assert.ok(r.pendingDiscards.includes(p.id));
+  assert.equal(r.turn.id, q.id);
 });
 test("insufficient heat spins out and adds stress, shifts to gear 1", () => {
   const r = controlled(),
