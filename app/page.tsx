@@ -1,6 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
-import { crossed, type Card } from "../lib/game";
+import { crossed, type Card, type FlipReveal } from "../lib/game";
 import { getTrack, TRACK_OPTIONS, type TrackId } from "../lib/tracks";
 import { compareCars, innerLane } from "../lib/track-geometry";
 import { Circuit } from "./circuit";
@@ -34,6 +34,7 @@ type R = {
   turn: any;
   log: string[];
   canSlip: boolean;
+  reveals?: FlipReveal[];
 };
 function CardButton({
   card,
@@ -86,6 +87,8 @@ export default function Home() {
     [help, setHelp] = useState(false),
     [connected, setConnected] = useState(true),
     [notice, setNotice] = useState("");
+  const [flipReveals, setFlipReveals] = useState<FlipReveal[]>([]);
+  const revealSeen = useRef({ code: "", ids: new Set<string>() });
   const currentCode = useRef("");
   const rRef = useRef<R | null>(null);
   const lastKey = useRef("");
@@ -97,6 +100,23 @@ export default function Home() {
         (a, b) => (a.rank || 99) - (b.rank || 99) || compareCars(track, a, b),
       )
     : [];
+  useEffect(() => {
+    if (revealSeen.current.code !== (r?.code || "")) {
+      revealSeen.current = { code: r?.code || "", ids: new Set() };
+      setFlipReveals([]);
+    }
+    const fresh = (r?.reveals || []).filter((event) => {
+      if (revealSeen.current.ids.has(event.id)) return false;
+      revealSeen.current.ids.add(event.id);
+      return Date.now() - event.at < 20000;
+    });
+    if (fresh.length) setFlipReveals((previous) => [...previous, ...fresh].slice(-6));
+  }, [r?.code, r?.reveals]);
+  useEffect(() => {
+    if (!flipReveals.length) return;
+    const timer = setTimeout(() => setFlipReveals([]), 20000);
+    return () => clearTimeout(timer);
+  }, [flipReveals]);
   function apply(data: R) {
     if (currentCode.current && data.code !== currentCode.current) return;
     if (rRef.current?.code === data.code && data.version < rRef.current.version)
@@ -633,10 +653,6 @@ export default function Home() {
                     </div>
                     <div className="metrics">
                       <div>
-                        <b>{me.engine}</b>
-                        <span>可用热量</span>
-                      </div>
-                      <div>
                         <b>{me.gear}</b>
                         <span>当前挡位</span>
                       </div>
@@ -773,7 +789,36 @@ export default function Home() {
                       <span>弃牌堆</span>
                       <strong>{me.discardCount}<small>张</small></strong>
                     </div>
+                    <div className="pileCount" title="引擎区可用的热量卡">
+                      <span>热量卡</span>
+                      <strong>{me.engine}<small>张</small></strong>
+                    </div>
                   </div>
+                  {flipReveals.length > 0 && (
+                    <section className="flipReveals" aria-label="最近翻牌" aria-live="polite">
+                      <div className="flipHeading">
+                        <span>实际翻牌 <small>20 秒后收起</small></span>
+                        <button type="button" onClick={() => setFlipReveals([])}>收起翻牌</button>
+                      </div>
+                      {flipReveals.map((event) => (
+                        <div className="flipReveal" key={event.id}>
+                          <div className="flipSummary">
+                            <strong>{r.players.find((p) => p.id === event.playerId)?.name || "车手"} · {event.kind === "stress" ? "压力翻牌" : "加速翻牌"}</strong>
+                            <span>速度 +{event.value}</span>
+                          </div>
+                          <ol className="flipCards" aria-label="按翻牌顺序">
+                            {event.cards.map((card, index) => (
+                              <li className={`flipCard ${card.type}`} key={`${event.id}:${index}`}>
+                                <span>{card.type === "heat" ? "热量" : card.type === "stress" ? "压力" : card.basic ? "基础速度" : "升级速度"}</span>
+                                <strong>{card.type === "heat" ? "♨" : card.type === "stress" ? "?" : card.value}</strong>
+                                <small>{index === event.cards.length - 1 ? "计入速度" : "跳过 · 弃牌"}</small>
+                              </li>
+                            ))}
+                          </ol>
+                        </div>
+                      ))}
+                    </section>
+                  )}
                   <div className="handHeading">
                     <span>
                       你的手牌 <small>{me.handCount} 张</small>

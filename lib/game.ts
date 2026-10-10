@@ -15,6 +15,14 @@ export type Card = {
   value: number;
   basic?: boolean;
 };
+export type FlipReveal = {
+  id: string;
+  playerId: string;
+  kind: "stress" | "boost";
+  cards: Card[];
+  value: number;
+  at: number;
+};
 export type Player = {
   id: string;
   token: string;
@@ -56,6 +64,7 @@ export type Room = {
   log: string[];
   requests: string[];
   version: number;
+  reveals?: FlipReveal[];
 };
 const assert = (ok: unknown, msg: string) => {
   if (!ok) throw new Error(msg);
@@ -139,15 +148,25 @@ function heat(p: Player, n: number) {
   p.engine -= n;
   for (let i = 0; i < n; i++) p.discard.push(card("heat"));
 }
-function randomSpeed(p: Player): number {
+function randomSpeed(r: Room, p: Player, kind: FlipReveal["kind"]): number {
   let c: Card | undefined;
+  const cards: Card[] = [];
   assert(
     [...p.deck, ...p.discard].some((c) => c.type === "speed" && c.basic),
     "牌库中没有可翻出的基础速度牌",
   );
   while ((c = draw(p))) {
+    cards.push(c);
     if (c.type === "speed" && c.basic) {
       p.played.push(c);
+      r.reveals = [...(r.reveals || []), {
+        id: crypto.randomUUID(),
+        playerId: p.id,
+        kind,
+        cards,
+        value: c.value,
+        at: Date.now(),
+      }].slice(-16);
       return c.value;
     }
     p.discard.push(c);
@@ -270,7 +289,7 @@ function next(r: Room) {
     for (const c of [...p.played]) {
       if (c.type === "speed") speed += c.value;
       else if (c.type === "stress") {
-        const n = randomSpeed(p);
+        const n = randomSpeed(r, p, "stress");
         stress.push(n);
         speed += n;
       }
@@ -338,6 +357,7 @@ export function start(r: Room) {
   assert(r.phase === "lobby", "比赛已经开始");
   assert(r.players.length >= 2, "至少需要两名车手，可以添加电脑");
   shuffle(r.players);
+  r.reveals = [];
   r.players.forEach((p, i) => {
     p.pos = -Math.floor(i / 2);
     p.lane = (innerLane(getTrack(r.trackId), p.pos) + (i % 2)) % 2;
@@ -431,7 +451,7 @@ export function react(r: Room, p: Player, action: string, ids: string[] = []) {
     assert(!t.boost, "每回合只能加速一次");
     heat(p, 1);
     t.boost = true;
-    const n = randomSpeed(p);
+    const n = randomSpeed(r, p, "boost");
     t.speed += n;
     land(r, p, p.pos + n);
     log(r, `${p.name} 加速 +${n}。`);

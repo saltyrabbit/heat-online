@@ -641,6 +641,72 @@ footer {
   font-weight: 400;
   color: var(--muted);
 }
+.flipReveals {
+  border: 1px solid #cbd0c3;
+  border-radius: 5px;
+  background: #f4f3ea;
+  padding: 14px;
+  margin-bottom: 16px;
+}
+.flipHeading, .flipSummary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  font-size: 12px;
+}
+.flipHeading small {
+  color: var(--muted);
+  font-size: 10px;
+  margin-left: 8px;
+}
+.flipHeading button {
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+  font-size: 11px;
+  cursor: pointer;
+}
+.flipReveal {
+  margin-top: 14px;
+}
+.flipSummary {
+  font-size: 11px;
+}
+.flipSummary > span {
+  white-space: nowrap;
+  font-weight: 700;
+}
+.flipCards {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  list-style: none;
+  margin: 9px 0 0;
+  padding: 0 0 4px;
+}
+.flipCard {
+  flex: 0 0 78px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 9px 5px;
+  border: 1px solid #c4ccbc;
+  border-radius: 5px;
+  background: #edf0e3;
+}
+.flipCard.heat { background: #eed9cf; }
+.flipCard.stress { background: #f3e6be; }
+.flipCard > span, .flipCard small { font-size: 9px; }
+.flipCard strong {
+  font-family: "Barlow Condensed", Arial;
+  font-size: 36px;
+  line-height: 1;
+}
+.flipCard:last-child {
+  border-color: var(--ink);
+}
 .handHeading {
   display: flex;
   align-items: center;
@@ -1020,9 +1086,10 @@ footer {
   }
   .pileCount {
     flex: 1;
+    flex-direction: column;
     min-width: 0;
-    gap: 10px;
-    padding: 10px 12px;
+    gap: 7px;
+    padding: 10px 8px;
   }
   .hand {
     gap: 9px;

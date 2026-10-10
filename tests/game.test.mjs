@@ -88,6 +88,45 @@ test("two-gear shift pays exactly one engine heat", () => {
   assert.equal(p.engine, 5);
   assert.equal(p.discard.length, 1);
 });
+test("stress reveals every drawn card in order, separately for each stress card", () => {
+  const r = controlled(), p = r.players[0], q = r.players[1];
+  const first = c(0, "stress"), second = c(0, "stress");
+  const upgrade = c(5, "speed", false), skippedStress = c(0, "stress");
+  const three = c(3), skippedHeat = c(0, "heat"), two = c(2);
+  p.hand = [first, second];
+  p.deck = [two, skippedHeat, three, skippedStress, upgrade];
+  plan(r, p, 2, [first.id, second.id]);
+  plan(r, q, 1, [q.hand[1].id]);
+  assert.deepEqual(r.reveals.map((event) => event.cards.map((card) => card.id)), [
+    [upgrade.id, skippedStress.id, three.id], [skippedHeat.id, two.id],
+  ]);
+  assert.deepEqual(r.reveals.map((event) => [event.kind, event.value, event.playerId]), [
+    ["stress", 3, p.id], ["stress", 2, p.id],
+  ]);
+  assert.equal(new Set(r.reveals.map((event) => event.id)).size, 2);
+  assert.equal(r.turn.speed, 5);
+  assert.deepEqual(p.discard.map((card) => card.id), [upgrade.id, skippedStress.id, skippedHeat.id]);
+  assert.deepEqual(view(r, q.token).reveals, r.reveals);
+});
+test("boost records actual flips and survives advancement to another driver's turn", () => {
+  const r = controlled(), p = r.players[0], q = r.players[1];
+  delete r.reveals; // Rooms saved before reveal support remain compatible.
+  const four = c(4), skippedHeat = c(0, "heat"), upgrade = c(5, "speed", false);
+  p.deck = [four, skippedHeat, upgrade];
+  plan(r, p, 1, [p.hand[0].id]);
+  plan(r, q, 1, [q.hand[1].id]);
+  react(r, p, "boost");
+  assert.equal(p.engine, 5);
+  assert.equal(r.turn.speed, 9);
+  assert.deepEqual(r.reveals[0].cards.map((card) => card.id), [upgrade.id, skippedHeat.id, four.id]);
+  assert.equal(r.reveals[0].kind, "boost");
+  assert.equal(r.reveals[0].value, 4);
+  assert.ok(Number.isFinite(r.reveals[0].at));
+  react(r, p, "check");
+  react(r, p, "finish");
+  assert.equal(r.turn.id, q.id);
+  assert.equal(view(r, q.token).reveals[0].cards.at(-1).id, four.id);
+});
 test("cooldown recycles hand heat, corner charges full speed including boost", () => {
   const r = controlled(),
     p = r.players[0],
