@@ -764,16 +764,25 @@ export default function Home() {
                       </button>
                     </div>
                   )}
+                  <div className="pileCounts" role="group" aria-label="你的牌堆张数">
+                    <div className="pileCount">
+                      <span>抽牌堆</span>
+                      <strong>{me.deckCount}<small>张</small></strong>
+                    </div>
+                    <div className="pileCount">
+                      <span>弃牌堆</span>
+                      <strong>{me.discardCount}<small>张</small></strong>
+                    </div>
+                  </div>
                   <div className="handHeading">
                     <span>
                       你的手牌 <small>{me.handCount} 张</small>
                     </span>
                     <small>
-                      牌库 {me.deckCount} · 弃牌堆 {me.discardCount}
                       {r.phase === "plan" && !me.plan
-                        ? " · 点击选牌"
+                        ? "点击选牌"
                         : active && r.turn.step === "discard"
-                          ? " · 点击选择弃牌"
+                          ? "点击选择弃牌"
                           : ""}
                     </small>
                   </div>
