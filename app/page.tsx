@@ -7,6 +7,7 @@ import { Circuit } from "./circuit";
 import { RoundEvents } from "./round-events";
 import { RoundFlow } from "./round-flow";
 import { driverStage, isDiscarding } from "../lib/round-status";
+import { createRequestId } from "../lib/request-id";
 type P = {
   id: string;
   name: string;
@@ -162,7 +163,7 @@ export default function Home() {
     busyRef.current = true;
     setError("");
     try {
-      const requestId = crypto.randomUUID();
+      const requestId = createRequestId();
       for (let attempt = 0; attempt < 3; attempt++) {
         const res = await fetch("/api/rooms", {
           method: "POST",

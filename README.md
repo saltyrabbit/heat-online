@@ -4,6 +4,8 @@
 
 线上入口：https://heat-race-jwx-1008.bestpaper-55555.chatgpt.site
 
+ParrotVPN 公网入口：http://52.76.213.199/ （此入口的房间与 Sites 独立）。
+
 ## 开始比赛
 
 1. 输入昵称，选择赛道和 1 圈练习赛或正式赛（意大利 3 圈，其余 2 圈），创建房间。
@@ -61,6 +63,33 @@ HEAT_TEST_TRACK=italy HEAT_TEST_FORMAL=1 node tests/network.test.mjs
 ```
 
 测试覆盖规则边界、260 场完整比赛（含四张地图 2-6 人组合共 200 场逐操作随机比赛）、并发操作、重复请求、非法越权行动、手牌隐藏、座位恢复、地图边界、跨圈占位、房主选图权限与同步，以及两名网络客户端的完整比赛。
+
+## ParrotVPN 部署
+
+服务器使用 Node.js 24 + SQLite + Docker + Nginx；构建在本机完成，远端只运行约 44 MB 的 standalone 产物，不安装开发依赖。Sites 的默认构建仍使用 Cloudflare Workers / D1。
+
+```sh
+# 本机 Node 版（自动创建 data/heat.sqlite，无需手动建表）
+npm run build:node
+npm run start:node
+# 本机已配置 SSH Host ParrotVPN，源码提交后部署
+bash scripts/deploy-parrot.sh ParrotVPN
+# 验证公网完整比赛
+HEAT_TEST_URL=http://52.76.213.199 HEAT_TEST_TRACK=italy HEAT_TEST_FORMAL=1 node tests/network.test.mjs
+node --test tests/node-store.test.mjs tests/request-id.test.mjs
+```
+
+远端源码与构建在 `/srv/heat-online/releases/<Git SHA>`，当前版本链接为 `/srv/heat-online/current`，比赛数据库在 `/srv/heat-online/data/heat.sqlite`。容器 `heat-online` 仅绑定 `127.0.0.1:18766`，通过已有 Nginx 的 HTTP 80 入口提供服务；保留 ZVal 的 HTTPS 443 服务和 HTTP ACME 验证路径。容器使用非 root 用户、只读根目录、512 MB 内存上限、日志轮转和 `unless-stopped` 自动重启。
+
+```sh
+ssh ParrotVPN 'sudo docker stats --no-stream heat-online'
+ssh ParrotVPN 'sudo docker logs --tail 50 heat-online'
+ssh ParrotVPN 'sudo docker restart heat-online'
+# SQLite 在线一致性备份（首次或每次备份使用不同文件名）
+ssh ParrotVPN "sudo docker exec heat-online node --input-type=module -e 'import {DatabaseSync} from \"node:sqlite\"; new DatabaseSync(\"/data/heat.sqlite\").prepare(\"VACUUM INTO ?\").run(\"/data/heat-backup.sqlite\");'"
+```
+
+浏览器通过 HTTP 公网 IP 使用 `getRandomValues` 生成请求标识，兼容不提供 `randomUUID` 的非安全上下文。刷新或服务重启后，只要浏览器身份 cookie 仍在且房间未过期，即可恢复座位。首次部署不会复制 Sites 上已有比赛。
 
 ## 程序结构
 

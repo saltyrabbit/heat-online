@@ -1,4 +1,4 @@
-import { env } from "cloudflare:workers";
+import { getRoomDatabase } from "@/db/room-store";
 import {
   room,
   configure,
@@ -34,8 +34,8 @@ function response(data: unknown, status = 200, sid?: string, started?: number) {
   });
 }
 async function read(code: string) {
-  return env
-    .DB!.prepare("SELECT data, version FROM rooms WHERE code=? AND expires>?")
+  return getRoomDatabase()
+    .prepare("SELECT data, version FROM rooms WHERE code=? AND expires>?")
     .bind(code, Date.now())
     .first<{ data: string; version: number }>();
 }
@@ -89,8 +89,8 @@ export async function POST(req: Request) {
           (v) => alphabet[v % alphabet.length],
         ).join("");
         const r = room(code, String(b.name || "车手"), sid, laps, track.id);
-        const result = await env
-          .DB!.prepare(
+        const result = await getRoomDatabase()
+          .prepare(
             "INSERT OR IGNORE INTO rooms(code,data,version,expires) VALUES(?,?,0,?)",
           )
           .bind(code, JSON.stringify(r), Date.now() + 7 * 86400000)
@@ -192,8 +192,8 @@ export async function POST(req: Request) {
     autoBots(r);
     r.requests = [...r.requests, b.requestId].slice(-100);
     r.version = row.version + 1;
-    const result = await env
-      .DB!.prepare(
+    const result = await getRoomDatabase()
+      .prepare(
         "UPDATE rooms SET data=?,version=?,expires=? WHERE code=? AND version=?",
       )
       .bind(

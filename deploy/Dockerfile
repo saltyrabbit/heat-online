@@ -1,0 +1,16 @@
+FROM node:24-bookworm-slim AS build
+WORKDIR /app
+COPY package*.json ./
+RUN npm ci --no-audit --no-fund
+COPY . .
+RUN npm run build:node
+
+FROM node:24-bookworm-slim
+ENV NODE_ENV=production PORT=3000 HEAT_DATABASE_PATH=/data/heat.sqlite
+WORKDIR /app
+COPY --from=build /app/dist/standalone ./
+RUN mkdir /data && chown node:node /data
+USER node
+EXPOSE 3000
+HEALTHCHECK --interval=30s --timeout=5s --start-period=30s CMD node -e "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+CMD ["node", "server.js"]
