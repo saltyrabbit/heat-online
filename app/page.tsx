@@ -1,6 +1,8 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import {
+  shiftCost,
+  extraSlips,
   crossed,
   cornerLimit,
   type Card,
@@ -8,7 +10,13 @@ import {
   type RaceAction,
   type Turn,
 } from "../lib/game";
-import { getTrack, TRACK_OPTIONS, type TrackId } from "../lib/tracks";
+import {
+  getTrack,
+  terrainAt,
+  PACK_NAMES,
+  TRACK_OPTIONS,
+  type TrackId,
+} from "../lib/tracks";
 import { compareCars, innerLane } from "../lib/track-geometry";
 import { Circuit } from "./circuit";
 import { RoundEvents } from "./round-events";
@@ -16,6 +24,7 @@ import { RoundFlow } from "./round-flow";
 import { driverStage, isDiscarding } from "../lib/round-status";
 import { createRequestId } from "../lib/request-id";
 import {
+  TrackRules,
   ModuleOptions,
   UpgradeFace,
   UpgradeHelp,
@@ -26,6 +35,7 @@ import {
   UpgradeActions,
 } from "./modules-ui";
 import {
+  maxCars,
   DEFAULT_MODULES,
   upgrade,
   speedRange,
@@ -79,6 +89,7 @@ type R = {
   canBoost?: boolean;
   cornerCost?: number;
   slipDistances?: number[];
+  draftMoves?: { cardIds: string[]; distance: number }[];
   mandatory?: {
     cardId: string;
     number: number;
@@ -353,7 +364,7 @@ export default function Home() {
                 </div>
               </div>
               <div className="featureRow">
-                <span>↗ 2–6 位车手</span>
+                <span>↗ 2–9 位车手</span>
                 <span>⟳ 同步回合</span>
                 <span>◎ 房间码邀请</span>
               </div>
@@ -376,12 +387,22 @@ export default function Home() {
                 <select
                   aria-label="选择赛道"
                   value={trackId}
-                  onChange={(e) => setTrackId(e.target.value as TrackId)}
+                  onChange={(e) => {
+                    const id = e.target.value as TrackId;
+                    setTrackId(id);
+                    const pack = getTrack(id).pack;
+                    if (pack)
+                      setModuleSettings((v) => ({ ...v, [pack]: true }));
+                  }}
                 >
                   {TRACK_OPTIONS.map((t) => (
                     <option key={t.id} value={t.id}>
                       {t.flag} {t.name}
-                      {t.official ? " · 基础版" : " · 原创"}
+                      {t.pack
+                        ? " · " + PACK_NAMES[t.pack]
+                        : t.official
+                          ? " · 基础版"
+                          : " · 原创"}
                     </option>
                   ))}
                 </select>
@@ -393,14 +414,16 @@ export default function Home() {
               <label>
                 比赛距离
                 <div className="segmented">
+                  {track.laps > 1 && (
+                    <button
+                      className={laps === 1 ? "on" : ""}
+                      onClick={() => setLaps(1)}
+                    >
+                      1 圈 · 练习赛
+                    </button>
+                  )}
                   <button
-                    className={laps === 1 ? "on" : ""}
-                    onClick={() => setLaps(1)}
-                  >
-                    1 圈 · 练习赛
-                  </button>
-                  <button
-                    className={laps === 2 ? "on" : ""}
+                    className={laps === 2 || track.laps === 1 ? "on" : ""}
                     onClick={() => setLaps(2)}
                   >
                     {track.laps} 圈 · 正式赛
@@ -408,6 +431,7 @@ export default function Home() {
                 </div>
               </label>
               <ModuleOptions
+                requiredPack={track.pack}
                 value={moduleSettings}
                 disabled={busy}
                 onChange={setModuleSettings}
@@ -511,7 +535,7 @@ export default function Home() {
                   </span>
                   <span>
                     {r.phase === "lobby"
-                      ? `${r.players.length} / 6 车手`
+                      ? `${r.players.length} / ${maxCars(r.modules)} 车手`
                       : `第 ${r.round} 回合 · ${r.laps} 圈`}
                   </span>
                 </div>
@@ -612,8 +636,12 @@ export default function Home() {
                           })
                         }
                       >
-                        <option value={1}>1 圈 · 练习赛</option>
-                        <option value={0}>{track.laps} 圈 · 正式赛</option>
+                        <option value={1}>
+                          {track.laps === 1 ? "1 圈 · 正式赛" : "1 圈 · 练习赛"}
+                        </option>
+                        {track.laps > 1 && (
+                          <option value={0}>{track.laps} 圈 · 正式赛</option>
+                        )}
                       </select>
                     </label>
                     <p className="trackFacts">
@@ -621,6 +649,7 @@ export default function Home() {
                       发车后锁定设置
                     </p>
                     <ModuleOptions
+                      requiredPack={track.pack}
                       value={r.modules}
                       disabled={busy || r.me !== r.host}
                       onChange={(modules) =>
@@ -635,7 +664,9 @@ export default function Home() {
                       <>
                         <button
                           className="outline wide"
-                          disabled={busy || r.players.length >= 6}
+                          disabled={
+                            busy || r.players.length >= maxCars(r.modules)
+                          }
                           onClick={() => send("bot")}
                         >
                           ＋ 添加电脑车手
@@ -677,6 +708,7 @@ export default function Home() {
                 )}
               </aside>
             </div>
+            <TrackRules trackId={r.trackId} player={me || undefined} />
             <RaceConditions room={r} />
             <UpgradeLoadouts room={r} />
             {r.phase !== "draft" && <RoundFlow room={r} />}
@@ -768,7 +800,7 @@ export default function Home() {
                               disabled={
                                 busy ||
                                 Math.abs(g - me.gear) > 2 ||
-                                (Math.abs(g - me.gear) === 2 && me.engine < 1)
+                                shiftCost(r, me, g) > me.engine
                               }
                               onClick={() => {
                                 setGear(g);
@@ -791,8 +823,8 @@ export default function Home() {
                           {nextCorner
                             ? `距弯前最后一格 ${nextCorner.at - 1 - me.pos} 格，限速 ${cornerLimit(r!, me, nextCorner.at, nextCorner.limit)}`
                             : "前方终点直道"}
-                          {Math.abs(gear - me.gear) === 2
-                            ? " · 换两挡支付 1 热量"
+                          {shiftCost(r, me, gear)
+                            ? ` · 换挡支付 ${shiftCost(r, me, gear)} 热量${terrainAt(track, me.pos, me.lane) === "flooded" && gear < me.gear ? "（含积水 +1）" : ""}`
                             : ""}
                         </span>
                       </div>
@@ -813,6 +845,39 @@ export default function Home() {
                         send("react", { kind, options, cards })
                       }
                     />
+                  )}
+                  {active && r.turn.step === "slip" && (
+                    <div className="reactRow">
+                      <h3>第 6 步 · 连续尾流</h3>
+                      <p>
+                        已完成 {r.turn.slips} 次尾流，最多 {1 + extraSlips(me)}{" "}
+                        次。每次按新位置重新判断条件和路段奖励。
+                      </p>
+                      <div className="actionButtons">
+                        {r.slipDistances?.map((distance) => (
+                          <button
+                            key={distance}
+                            className="outline"
+                            disabled={busy || !r.canSlip}
+                            onClick={() =>
+                              send("react", {
+                                kind: "slip",
+                                options: { distance },
+                              })
+                            }
+                          >
+                            继续尾流 +{distance} 格
+                          </button>
+                        ))}
+                        <button
+                          className="primary"
+                          disabled={busy}
+                          onClick={() => send("react", { kind: "check" })}
+                        >
+                          停止尾流 · 检查弯道 →
+                        </button>
+                      </div>
+                    </div>
                   )}
                   {active && r.turn.step === "react" && (
                     <div className="reactRow">
@@ -886,7 +951,8 @@ export default function Home() {
                                 })
                               }
                             >
-                              尾流 +{distance} · 检查弯道
+                              尾流 +{distance} ·{" "}
+                              {extraSlips(me) ? "进入连续尾流" : "检查弯道"}
                             </button>
                           ),
                         )}
@@ -915,7 +981,13 @@ export default function Home() {
                         </p>
                       ) : null}
                       <p>
-                        可选弃掉速度牌，然后自动补牌。压力牌和热量牌必须保留；你的收尾不会阻塞下一位车手。
+                        {terrainAt(track, me.pos, me.lane) === "tunnel"
+                          ? "停在隧道内：不能从手牌弃牌，直接补牌。"
+                          : "可选弃掉速度牌，然后自动补牌。压力牌和热量牌必须保留。"}
+                        你的收尾不会阻塞下一位车手。
+                        {terrainAt(track, me.pos, me.lane) === "gravel"
+                          ? "碎石车位：补牌前自动支付 1 热量；引擎区为空时忽略。"
+                          : ""}
                       </p>
                       <button
                         className="primary"
@@ -980,7 +1052,9 @@ export default function Home() {
                             (r.phase === "plan" &&
                               !me.plan &&
                               c.type !== "heat") ||
-                            (discarding && c.type === "speed")
+                            (discarding &&
+                              c.type === "speed" &&
+                              terrainAt(track, me.pos, me.lane) !== "tunnel")
                           )
                         }
                         onClick={() => toggle(c.id)}
@@ -1109,7 +1183,7 @@ export default function Home() {
               </li>
               <li>
                 <b>灵活冷却和加速。</b>1 挡可冷却 3 张，2 挡可冷却 1
-                张。一次加速花 1 热量并翻出随机 1–4 速度。末位（5–6
+                张。一次加速花 1 热量并翻出随机 1–4 速度。末位（5–9
                 人时末两位）额外获得一次冷却与可选 +1
                 速度。可自由安排这些效果的顺序。
               </li>
@@ -1130,11 +1204,12 @@ export default function Home() {
               </li>
             </ol>
             <p className="helpNote">
-              美国、法国、英国和意大利采用基础版赛道格数、弯线和限速，使用原创示意重绘。意大利正式赛为
-              3 圈，其余为 2 圈；另有海岸原创赛道和 1
-              圈练习赛。可用牌不足时会强制原地停留并降挡。本版包含起始
+              十张官方赛道使用核对后的格数、弯线和限速，以原创示意图重绘；每张地图显示自己的正式圈数、引擎热量和压力数量。另有海岸原创赛道，也可选择
+              1 圈练习赛。可用牌不足时会强制原地停留并降挡。本版包含起始
               0、5、热量升级牌；启用车库后，由 3
-              张选定升级替换。支持基础盒的天气与路况、普通和高级升级三个独立开关。几何内侧优先是本版自定义规则；直线沿用前一弯的内侧，以每格绿线为准。
+              张选定升级替换。支持天气与路况、普通和高级升级，以及 Heavy
+              Rain、Tunnel Vision、Rocky Roads
+              单场比赛内容。三个扩展盒各增加一个车手席位；新高级升级在对应盒与高级车库同时开启时混入选牌。几何内侧优先是本版自定义规则；直线沿用前一弯的内侧，以每格绿线为准。
             </p>
             <section className="expansionGuide">
               <h3>天气与车库</h3>
@@ -1179,6 +1254,70 @@ export default function Home() {
               >
                 官方进阶规则 v1.1（车库第 3–4 页，天气第 6–7 页）↗
               </a>
+            </section>
+            <section className="expansionGuide">
+              <h3>三款扩展盒 · 单场比赛</h3>
+              <p>
+                三个盒可以分别开启，每盒增加一个席位，最多 9
+                人。选择盒内赛道会自动启用对应盒；开启高级车库后，才把该盒的 6
+                种升级各两张混入选牌市场。升级必须实际打出，效果只在该车手本回合生效。
+              </p>
+              <dl>
+                <dt>Heavy Rain · 日本、墨西哥</dt>
+                <dd>
+                  日本的积水车位用蓝色 ≈ 标出。第 1
+                  步开始时停在积水上，降挡额外支付 1 热量：降一挡付 1，降两挡付
+                  2；升挡和留挡不加费。超级冷却在第 5
+                  步使用，从自己的弃牌堆将至多指定数量的热量移回引擎；每个图标本回合一次，禁止冷却路段也禁止它。
+                </dd>
+                <dt>Tunnel Vision · 西班牙、荷兰</dt>
+                <dd>
+                  西班牙的隧道用深色 ▥ 标出。停在隧道时禁止手牌进弃牌堆，包括第
+                  5 步减压和第 8 步弃速度牌；普通冷却、超级冷却、弃牌库和第 9
+                  步弃已打出的牌照常。牵引在第 5 步使用，前进 1
+                  至图标数量格，沿途及落点的两条车道必须全空，落点紧跟另一辆车。多个图标可以合用或分别用；不增加速度，可以跨最终终点，之后仍可加速或尾流。
+                </dd>
+                <dt>Rocky Roads · 德国、南非</dt>
+                <dd>
+                  南非的棕色点纹只标出实际碎石车位。第 9
+                  步弃已打出的牌之后、补牌之前，停在碎石车位且引擎还有热量时支付
+                  1；引擎为空则忽略。连续尾流在第 6
+                  步使用：普通尾流后，每个图标允许再尾流一次，每次都要在新位置重新满足尾流条件；升级奖励重复适用，天气路况按新位置判断。可以提前停止，结束后统一检查弯道，不能回到第
+                  5 步，也不能跨最终终点。
+                </dd>
+                <dt>减速弯（蓝色路肩）</dt>
+                <dd>
+                  两条弯线分别检查同一限速，天气与路况只抽一个共用标记。弯道限速和超速费标记影响两条线；路段标记仅从出口线后生效，两条线之间没有路段效果。
+                </dd>
+              </dl>
+              <p>
+                <a
+                  className="quiet"
+                  href="https://cdn.svc.asmodee.net/production-daysofwonder/uploads/2025/03/HTEX1-Rules-EN-FC.pdf"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Heavy Rain 官方规则 ↗
+                </a>
+                {" · "}
+                <a
+                  className="quiet"
+                  href="https://cdn.svc.asmodee.net/production-daysofwonder/uploads/2025/02/9103-HTEX2_EN_RULES_20240924_compressed.pdf"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Tunnel Vision 官方规则 ↗
+                </a>
+                {" · "}
+                <a
+                  className="quiet"
+                  href="https://cdn.svc.asmodee.net/production-daysofwonder/uploads/2026/01/HTEX3_EN_HEAT_Rocky_Road_RULES.pdf"
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  Rocky Roads 官方规则 ↗
+                </a>
+              </p>
             </section>
             <a
               className="quiet"

@@ -41,6 +41,27 @@ export function upgradeNotes(u: Upgrade): UpgradeNote[] {
       example: "一个＋翻到热量、升级、基础 3：前两张跳过，速度增加 3。",
     });
   const e = u.effects;
+  if (e.superCool)
+    notes.push({
+      label: `超级冷却至多 ${e.superCool} 张`,
+      timing: "第 5 步 · 反应",
+      kind: "optional",
+      text: `查看自己的弃牌堆，将至多 ${e.superCool} 张热量移回引擎区。与普通冷却不同：牌来自弃牌堆，不来自手牌。可以先支付费用或弃牌库，再找刚弃掉的热量；每个符号每轮使用一次。禁止冷却路段同样禁止超级冷却。`,
+    });
+  if (e.draft)
+    notes.push({
+      label: `牵引至多 ${e.draft} 格`,
+      timing: "第 5 步 · 反应",
+      kind: "optional",
+      text: `可前进 1 至 ${e.draft} 格；经过的每一格及落点的两个车位必须全空，落点前一格必须有其他车。可合并多张已出牌的牵引数值一次用，也可分开用；每个符号每轮使用一次。这次位移不增加速度，可以跨过最终终点线。牵引后仍可使用第 6 步尾流。`,
+    });
+  if (e.extraSlip)
+    notes.push({
+      label: `额外尾流 ${e.extraSlip} 次`,
+      timing: "第 6 步 · 普通尾流之后",
+      kind: "optional",
+      text: `本轮打出此牌并先完成普通尾流后，若新位置再次满足尾流条件，可再尾流 ${e.extraSlip} 次。多张牌的次数叠加，每次都重新判断当前位置的天气／路况与其他赛车；升级尾流奖励可再次应用。不能倒回第 5 步反应，也不能用尾流越过最终终点。所有尾流结束后统一检查经过的弯道。`,
+    });
   if (e.heat)
     notes.push({
       label: `支付 ${e.heat} 张热量`,
@@ -67,7 +88,7 @@ export function upgradeNotes(u: Upgrade): UpgradeNote[] {
       label: `弃掉至多 ${e.reduce} 张压力`,
       timing: "第 5 步 · 反应",
       kind: "optional",
-      text: `从自己的手牌选至多 ${e.reduce} 张压力牌，放入弃牌堆。它们不触发翻牌、不增加速度；腾出的手牌位置在收尾时补牌。`,
+      text: `从自己的手牌选至多 ${e.reduce} 张压力牌，放入弃牌堆。它们不触发翻牌、不增加速度；腾出的手牌位置在收尾时补牌。停在隧道内时禁止从手牌弃牌，不能使用减压。`,
     });
   if (e.salvage)
     notes.push({

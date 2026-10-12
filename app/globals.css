@@ -2315,3 +2315,6 @@ select:disabled {
     font-size: 25px !important;
   }
 }
+
+.trackRules { background:#edf3f4; border:1px solid #b6cbd0; border-radius:16px; padding:16px 20px; margin:14px 0; color:#355569; }
+.trackRules h3 {margin:0 0 8px;} .trackRules p {margin:6px 0;line-height:1.6;font-size:13px;} .trackRules strong {display:block;margin-top:8px;color:#ad623a;}

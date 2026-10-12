@@ -1,7 +1,15 @@
-import { getTrack, isTrackId, type Track, type TrackId } from "./tracks.ts";
+import {
+  getTrack,
+  isTrackId,
+  type Track,
+  type TrackId,
+  terrainAt,
+  roadCorners,
+} from "./tracks.ts";
 import { compareCars, innerLane } from "./track-geometry.ts";
 import {
   modules,
+  maxCars,
   DEFAULT_MODULES,
   UPGRADES,
   WEATHERS,
@@ -24,6 +32,9 @@ export const COLORS = [
   "#53b99b",
   "#b28ae2",
   "#ef92b5",
+  "#f49f42",
+  "#dfdfdb",
+  "#313b48",
 ];
 export type Card = {
   id: string;
@@ -93,7 +104,8 @@ export type Turn = {
   boost: boolean;
   adrenaline: boolean;
   slip: boolean;
-  step: "reveal" | "react" | "discard";
+  step: "reveal" | "react" | "slip" | "discard";
+  slips?: number;
   plus?: number;
   effects?: Record<string, { used: string[]; cool: number }>;
   weatherCoolUsed?: boolean;
@@ -172,7 +184,10 @@ export function room(
     code,
     host: p.id,
     phase: "lobby",
-    modules: { ...DEFAULT_MODULES },
+    modules: {
+      ...DEFAULT_MODULES,
+      ...(getTrack(trackId).pack ? { [getTrack(trackId).pack!]: true } : {}),
+    },
     laps: laps === 1 ? 1 : getTrack(trackId).laps,
     trackId,
     round: 0,
@@ -311,6 +326,8 @@ export function crossed(
 }
 export function canSlip(r: Room, p: Player) {
   if (sectorEffect(r, p.pos, getTrack(r.trackId)) === "noSlip") return false;
+  if (r.turn?.id === p.id && (r.turn.slips || 0) >= 1 + extraSlips(p))
+    return false;
   const length = getTrack(r.trackId).length;
   const cell = (pos: number) => ((pos % length) + length) % length;
   return (
@@ -460,7 +477,15 @@ export function configure(
 ) {
   assert(r.phase === "lobby", "只能在比赛开始前选择赛道");
   assert(isTrackId(trackId), "赛道不存在");
-  if (settings !== undefined) r.modules = modules(settings);
+  const nextSettings =
+    settings === undefined ? modules(r.modules) : modules(settings);
+  const pack = getTrack(trackId as TrackId).pack;
+  if (pack) nextSettings[pack] = true;
+  assert(
+    r.players.length <= maxCars(nextSettings),
+    "当前车手数超过关闭扩展后的上限，请先移除多余车手",
+  );
+  r.modules = nextSettings;
   r.trackId = trackId as TrackId;
   r.laps = laps === 1 ? 1 : getTrack(r.trackId).laps;
   log(r, `赛道改为${getTrack(r.trackId).name}，${r.laps} 圈。`);
@@ -475,7 +500,11 @@ export function makeUpgrade(number: number): Card {
 }
 export function upgradePool(settings: Modules): Card[] {
   return UPGRADES.filter((u) =>
-    u.advanced ? settings.advanced : settings.regular,
+    u.pack
+      ? settings.advanced && settings[u.pack]
+      : u.advanced
+        ? settings.advanced
+        : settings.regular,
   ).flatMap((u) => [makeUpgrade(u.number), makeUpgrade(u.number)]);
 }
 export function cornerLimit(
@@ -574,7 +603,10 @@ function beginRace(r: Room) {
   const w = r.weather;
   for (const p of r.players) {
     p.engine =
-      6 + (w?.engine || 0) - (w?.deckHeat || 0) - (w?.discardHeat || 0);
+      (getTrack(r.trackId).engine ?? 6) +
+      (w?.engine || 0) -
+      (w?.deckHeat || 0) -
+      (w?.discardHeat || 0);
     p.discard = Array.from({ length: w?.discardHeat || 0 }, () => card("heat"));
     const upgrades =
       r.modules?.regular || r.modules?.advanced
@@ -585,7 +617,10 @@ function beginRace(r: Room) {
         card("speed", Math.floor(i / 3) + 1, true),
       ),
       ...upgrades,
-      ...Array.from({ length: 3 + (w?.stress || 0) }, () => card("stress")),
+      ...Array.from(
+        { length: (getTrack(r.trackId).stress ?? 3) + (w?.stress || 0) },
+        () => card("stress"),
+      ),
       ...Array.from({ length: w?.deckHeat || 0 }, () => card("heat")),
     ]);
     refill(p);
@@ -632,6 +667,9 @@ export function start(r: Room) {
   assert(r.phase === "lobby", "比赛已经开始");
   assert(r.players.length >= 2, "至少需要两名车手，可以添加电脑");
   r.modules = modules(r.modules);
+  const track = getTrack(r.trackId);
+  if (track.pack) r.modules[track.pack] = true;
+  assert(r.players.length <= maxCars(r.modules), "房间车手超过人数上限");
   shuffle(r.players);
   r.reveals = [];
   r.actions = [];
@@ -642,8 +680,8 @@ export function start(r: Room) {
   r.weather = r.modules.weather ? shuffle([...WEATHERS])[0] : undefined;
   r.roads = r.modules.weather
     ? shuffle(ROAD_KINDS.flatMap((kind) => [kind, kind]))
-        .slice(0, getTrack(r.trackId).corners.length)
-        .map((kind, i) => ({ kind, at: getTrack(r.trackId).corners[i].at }))
+        .slice(0, roadCorners(track).length)
+        .map((kind, i) => ({ kind, at: roadCorners(track)[i].at }))
     : undefined;
   r.players.forEach((p, i) => {
     p.pos = -Math.floor(i / 2);
@@ -704,7 +742,8 @@ export function plan(r: Room, p: Player, gear: number, ids: string[]) {
       ids.every((id) => p.hand.find((c) => c.id === id)!.type !== "heat"),
     "热量牌不能主动打出",
   );
-  if (Math.abs(gear - p.gear) === 2) heat(p, 1);
+  const shiftHeat = shiftCost(r, p, gear);
+  heat(p, shiftHeat);
   p.gear = gear;
   p.played = ids.map((id) => p.hand.find((c) => c.id === id)!);
   p.hand = p.hand.filter((c) => !ids.includes(c.id));
@@ -730,6 +769,7 @@ export type ReactOptions = {
   effect?: keyof Effects;
   values?: Record<string, number>;
   distance?: number;
+  cardIds?: string[];
 };
 export function react(
   r: Room,
@@ -740,6 +780,10 @@ export function react(
 ) {
   migrateCleanup(r);
   if (r.phase === "turn" && r.pendingDiscards?.includes(p.id)) {
+    assert(
+      !ids.length || terrainAt(getTrack(r.trackId), p.pos, p.lane) !== "tunnel",
+      "隧道内不能从手牌弃牌",
+    );
     assert(action === "finish", "当前需要弃牌并结束回合");
     assert(
       Array.isArray(ids) &&
@@ -764,6 +808,13 @@ export function react(
       if (c) p.deck.push(c);
     }
     p.refreshIds = [];
+    if (
+      terrainAt(getTrack(r.trackId), p.pos, p.lane) === "gravel" &&
+      p.engine > 0
+    ) {
+      heat(p, 1);
+      log(r, `${p.name} 停在碎石车位，补牌前支付 1 热量。`, p, "corner");
+    }
     refill(p);
     recordAction(
       r,
@@ -803,7 +854,11 @@ export function react(
     revealMove(r, p);
     return;
   }
-  assert(t.step === "react", "当前不能反应");
+  assert(
+    t.step === "react" ||
+      (t.step === "slip" && ["slip", "check"].includes(action)),
+    "当前不能反应，连续尾流阶段只可继续尾流或检查弯道",
+  );
   if (action === "direct") {
     const c = p.hand.find((c) => c.id === options.cardId);
     assert(c && upgrade(c)?.effects.direct, "此牌不能在反应阶段追加");
@@ -822,6 +877,8 @@ export function react(
       `${p.name} 追加 #${c!.upgrade} ${upgrade(c!)!.name}，速度 +${n}。`,
       { kind: "upgrade", cards: [{ ...c! }] },
     );
+  } else if (action === "draftMove") {
+    applyDraft(r, p, options);
   } else if (action === "effect") {
     applyEffect(r, p, options.cardId, options.effect, ids);
   } else if (action === "replace") {
@@ -881,7 +938,17 @@ export function react(
       );
       land(r, p, p.pos + distance);
       t.slip = true;
-      log(r, `${p.name} 使用尾流前进 ${distance} 格。`, p, "slip");
+      t.slips = (t.slips || 0) + 1;
+      log(
+        r,
+        `${p.name} 使用第 ${t.slips} 次尾流前进 ${distance} 格。`,
+        p,
+        "slip",
+      );
+      if (t.slips < 1 + extraSlips(p) && canSlip(r, p)) {
+        t.step = "slip";
+        return;
+      }
     }
     checkCorners(r, p);
     recordAction(r, p, `${p.name} 完成弯道检查。`, { kind: "corner" });
@@ -918,9 +985,15 @@ function applyEffect(
   assert(
     kind &&
       e?.[kind] !== undefined &&
-      ["heat", "scrap", "reduce", "salvage", "refresh", "accelerate"].includes(
-        kind,
-      ),
+      [
+        "heat",
+        "scrap",
+        "reduce",
+        "salvage",
+        "refresh",
+        "accelerate",
+        "superCool",
+      ].includes(kind),
     "此牌没有该反应效果",
   );
   const state = effectState(t, c!.id);
@@ -929,6 +1002,25 @@ function applyEffect(
   const selectedCards = (
     kind === "reduce" ? p.hand : kind === "salvage" ? p.discard : []
   ).filter((c) => ids.includes(c.id));
+  if (kind === "superCool") {
+    assert(
+      sectorEffect(r, p.pos, getTrack(r.trackId)) !== "noCool",
+      "当前路段禁止冷却，包括超级冷却",
+    );
+    let count = 0;
+    p.discard = p.discard.filter((x) => {
+      if (x.type !== "heat" || count >= e.superCool!) return true;
+      count++;
+      return false;
+    });
+    p.engine += count;
+    log(
+      r,
+      `${p.name} #${u.number} 超级冷却，将 ${count} 张弃牌热量移回引擎区。`,
+      p,
+      "cool",
+    );
+  }
   if (kind === "heat") heat(p, e.heat!);
   if (kind === "scrap") {
     const discarded: Card[] = [];
@@ -947,6 +1039,10 @@ function applyEffect(
     );
   }
   if (kind === "reduce") {
+    assert(
+      terrainAt(getTrack(r.trackId), p.pos, p.lane) !== "tunnel",
+      "隧道内不能从手牌弃牌，减压也不可用",
+    );
     assert(
       ids.length <= e.reduce! &&
         ids.every((id) =>
@@ -972,7 +1068,7 @@ function applyEffect(
   if (kind === "refresh") (p.refreshIds ||= []).push(c!.id);
   if (kind === "accelerate") moveExtra(r, p, t.plus || 0);
   state.used.push(kind!);
-  if (kind !== "scrap") {
+  if (kind !== "scrap" && kind !== "superCool") {
     const detail = {
       heat: `支付 ${e.heat} 热量`,
       reduce: `减压，弃掉 ${ids.length} 张压力牌`,
@@ -1028,7 +1124,8 @@ export function botChoice(r: Room, p: Player) {
     p.hand.filter((c) => c.type === "stress").length >= 5 &&
     !p.hand.some((c) => c.type === "heat")
   ) {
-    const gear = p.gear === 4 ? 3 : p.gear + 1;
+    const preferred = p.gear === 4 ? 3 : p.gear + 1;
+    const gear = shiftCost(r, p, preferred) <= p.engine ? preferred : p.gear;
     return {
       gear,
       ids: p.hand
@@ -1040,10 +1137,7 @@ export function botChoice(r: Room, p: Player) {
 
   let best: { gear: number; ids: string[]; score: number } | null = null;
   for (let gear = 1; gear <= 4; gear++) {
-    if (
-      Math.abs(p.gear - gear) > 2 ||
-      (Math.abs(p.gear - gear) === 2 && p.engine === 0)
-    )
+    if (Math.abs(p.gear - gear) > 2 || shiftCost(r, p, gear) > p.engine)
       continue;
     const playable = p.hand.filter((c) => c.type !== "heat");
     for (const cards of combinations(
@@ -1060,7 +1154,7 @@ export function botChoice(r: Room, p: Player) {
       );
       const engine =
         p.engine -
-        (Math.abs(p.gear - gear) === 2 ? 1 : 0) +
+        shiftCost(r, p, gear) +
         Math.min(
           p.hand.filter((c) => c.type === "heat").length,
           gear === 1 ? 3 : gear === 2 ? 1 : 0,
@@ -1091,6 +1185,7 @@ export function botPlan(r: Room, p: Player) {
   plan(r, p, choice.gear, choice.ids);
 }
 function botDiscards(r: Room, p: Player) {
+  if (terrainAt(getTrack(r.trackId), p.pos, p.lane) === "tunnel") return [];
   const track = getTrack(r.trackId),
     corner = crossed(
       p.pos,
@@ -1187,12 +1282,32 @@ export function autoBots(r: Room) {
         react(r, p, "values", [], { values: choices[0] });
         continue;
       }
+      if (t.step === "slip") {
+        const distance = slipDistances(r, p)
+          .filter(
+            (n) => cornerCost(r, p, t.speed, t.start, p.pos + n) <= p.engine,
+          )
+          .at(-1);
+        react(r, p, distance ? "slip" : "check", [], { distance });
+        continue;
+      }
       while (coolAvailable(r, p) && p.hand.some((c) => c.type === "heat"))
         react(r, p, "cool");
       // Bots choose legal optional effects, then settle all mandatory symbols.
       for (const c of [...p.played]) {
         const e = upgrade(c)?.effects;
-        if (e?.reduce && !t.effects?.[c.id]?.used.includes("reduce"))
+        if (
+          e?.superCool &&
+          t.step === "react" &&
+          sectorEffect(r, p.pos, getTrack(r.trackId)) !== "noCool" &&
+          !t.effects?.[c.id]?.used.includes("superCool")
+        )
+          react(r, p, "effect", [], { cardId: c.id, effect: "superCool" });
+        if (
+          e?.reduce &&
+          terrainAt(getTrack(r.trackId), p.pos, p.lane) !== "tunnel" &&
+          !t.effects?.[c.id]?.used.includes("reduce")
+        )
           react(
             r,
             p,
@@ -1215,6 +1330,18 @@ export function autoBots(r: Room) {
         if (m.effect === "heat" && p.engine < m.amount)
           react(r, p, "replace", [], { cardId: m.cardId });
         else react(r, p, "effect", [], { cardId: m.cardId, effect: m.effect });
+      }
+      for (let attempt = 0; attempt < 3; attempt++) {
+        const moves = draftMoves(r, p).filter(
+          (m) =>
+            cornerCost(r, p, t.speed, t.start, p.pos + m.distance) <= p.engine,
+        );
+        const move = moves.sort(
+          (a, b) =>
+            b.distance - a.distance || a.cardIds.length - b.cardIds.length,
+        )[0];
+        if (!move) break;
+        react(r, p, "draftMove", [], move);
       }
       const distance = slipDistances(r, p)
         .filter(
@@ -1247,6 +1374,10 @@ export function view(r: Room, token: string) {
           cool: coolAvailable(r, r.players.find((p) => p.id === r.turn!.id)!),
         }
       : null,
+    draftMoves:
+      r.turn?.id === me!.id && r.turn.step === "react"
+        ? draftMoves(r, me!)
+        : [],
     slipDistances: r.turn
       ? slipDistances(r, r.players.find((p) => p.id === r.turn!.id)!)
       : [],
@@ -1289,4 +1420,69 @@ export function view(r: Room, token: string) {
       ? canSlip(r, r.players.find((p) => p.id === r.turn!.id)!)
       : false,
   };
+}
+
+export function shiftCost(
+  r: Pick<Room, "trackId">,
+  p: Pick<Player, "gear" | "pos" | "lane">,
+  gear: number,
+) {
+  return (
+    (Math.abs(gear - p.gear) === 2 ? 1 : 0) +
+    (gear < p.gear &&
+    terrainAt(getTrack(r.trackId), p.pos, p.lane) === "flooded"
+      ? 1
+      : 0)
+  );
+}
+export function extraSlips(p: Pick<Player, "played">) {
+  return p.played.reduce((n, c) => n + (upgrade(c)?.effects.extraSlip || 0), 0);
+}
+export type DraftMove = { cardIds: string[]; distance: number };
+export function draftMoves(r: Room, p: Player): DraftMove[] {
+  const t = r.turn;
+  if (!t || t.id !== p.id || t.step !== "react") return [];
+  const cards = p.played.filter(
+    (c) =>
+      upgrade(c)?.effects.draft && !t.effects?.[c.id]?.used.includes("draft"),
+  );
+  const length = getTrack(r.trackId).length,
+    cell = (pos: number) => ((pos % length) + length) % length;
+  const occupied = (pos: number) =>
+    r.players.some(
+      (x) => x.id !== p.id && !x.rank && cell(x.pos) === cell(pos),
+    );
+  const result: DraftMove[] = [];
+  for (let size = 1; size <= cards.length; size++)
+    for (const group of combinations(cards, size)) {
+      const max = group.reduce((n, c) => n + upgrade(c)!.effects.draft!, 0);
+      for (let distance = 1; distance <= max; distance++) {
+        if (occupied(p.pos + distance)) break;
+        if (occupied(p.pos + distance + 1))
+          result.push({ cardIds: group.map((c) => c.id), distance });
+      }
+    }
+  return result;
+}
+function applyDraft(r: Room, p: Player, options: ReactOptions) {
+  const ids = options.cardIds;
+  assert(
+    Array.isArray(ids) &&
+      new Set(ids).size === ids.length &&
+      draftMoves(r, p).some(
+        (m) =>
+          m.distance === options.distance &&
+          m.cardIds.length === ids!.length &&
+          m.cardIds.every((id) => ids!.includes(id)),
+      ),
+    "牵引无效：沿途和落点必须全空，落点必须紧跟另一辆车",
+  );
+  for (const id of ids!) effectState(r.turn!, id).used.push("draft");
+  land(r, p, p.pos + options.distance!);
+  log(
+    r,
+    `${p.name} 牵引前进 ${options.distance} 格（不增加速度），使用 ${ids!.map((id) => "#" + p.played.find((c) => c.id === id)!.upgrade).join("、")}。`,
+    p,
+    "upgrade",
+  );
 }

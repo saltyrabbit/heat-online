@@ -85,6 +85,348 @@ const shapes: Record<
     title: [520, 130],
   },
 };
+// Original curves follow the recognizable layout of the expansion boards.
+// Each route entry ends at a corner; intermediate points describe its approach.
+const expansionRoutes: Record<
+  string,
+  { routes: Point[][]; labels: Point[]; title: Point }
+> = {
+  japan: {
+    routes: [
+      [[420, 230]],
+      [[715, 270]],
+      [[610, 220]],
+      [[700, 65]],
+      [
+        [500, 100],
+        [450, 180],
+        [480, 340],
+        [340, 390],
+        [100, 390],
+        [100, 340],
+      ],
+      [
+        [145, 245],
+        [150, 140],
+        [240, 85],
+      ],
+      [
+        [280, 155],
+        [325, 215],
+        [420, 230],
+      ],
+    ],
+    labels: [
+      [785, 280],
+      [585, 180],
+      [750, 40],
+      [55, 335],
+      [240, 35],
+    ],
+    title: [330, 310],
+  },
+  mexico: {
+    routes: [
+      [[425, 390]],
+      [
+        [220, 380],
+        [100, 315],
+        [110, 195],
+      ],
+      [
+        [75, 115],
+        [165, 70],
+      ],
+      [
+        [245, 170],
+        [465, 200],
+        [610, 85],
+        [715, 75],
+      ],
+      [
+        [745, 125],
+        [700, 175],
+        [620, 210],
+      ],
+      [
+        [730, 270],
+        [730, 375],
+      ],
+      [
+        [690, 415],
+        [670, 400],
+      ],
+      [
+        [560, 395],
+        [425, 390],
+      ],
+    ],
+    labels: [
+      [160, 205],
+      [185, 30],
+      [770, 60],
+      [595, 245],
+      [785, 380],
+      [650, 445],
+    ],
+    title: [425, 290],
+  },
+  spain: {
+    routes: [
+      [[600, 405]],
+      [
+        [380, 405],
+        [220, 405],
+      ],
+      [
+        [140, 355],
+        [120, 260],
+      ],
+      [
+        [200, 215],
+        [355, 190],
+        [570, 185],
+        [575, 125],
+      ],
+      [
+        [545, 80],
+        [470, 120],
+      ],
+      [
+        [300, 145],
+        [130, 145],
+        [80, 105],
+      ],
+      [
+        [65, 45],
+        [370, 45],
+        [690, 45],
+        [715, 65],
+      ],
+      [
+        [770, 145],
+        [700, 215],
+        [440, 265],
+        [230, 300],
+        [210, 280],
+      ],
+      [
+        [225, 340],
+        [340, 335],
+        [445, 340],
+      ],
+      [
+        [505, 365],
+        [550, 340],
+      ],
+      [
+        [580, 370],
+        [610, 325],
+        [610, 270],
+      ],
+      [
+        [675, 275],
+        [730, 305],
+        [760, 340],
+      ],
+      [
+        [745, 395],
+        [690, 405],
+        [600, 405],
+      ],
+    ],
+    labels: [
+      [220, 445],
+      [65, 260],
+      [620, 120],
+      [470, 70],
+      [125, 105],
+      [745, 30],
+      [255, 280],
+      [445, 295],
+      [535, 405],
+      [635, 225],
+      [805, 340],
+    ],
+    title: [420, 23],
+  },
+  netherlands: {
+    routes: [
+      [[350, 395]],
+      [
+        [215, 350],
+        [90, 325],
+        [85, 280],
+      ],
+      [
+        [100, 225],
+        [170, 205],
+        [220, 185],
+      ],
+      [
+        [180, 140],
+        [130, 100],
+        [165, 75],
+      ],
+      [
+        [300, 120],
+        [430, 175],
+        [485, 195],
+      ],
+      [
+        [575, 150],
+        [655, 85],
+        [715, 60],
+      ],
+      [
+        [765, 160],
+        [660, 290],
+        [540, 370],
+        [350, 395],
+      ],
+    ],
+    labels: [
+      [40, 280],
+      [245, 230],
+      [125, 35],
+      [480, 240],
+      [760, 40],
+    ],
+    title: [385, 265],
+  },
+  germany: {
+    routes: [
+      [[420, 210]],
+      [
+        [230, 210],
+        [115, 180],
+        [75, 135],
+        [100, 90],
+      ],
+      [
+        [200, 50],
+        [350, 65],
+        [470, 80],
+      ],
+      [
+        [500, 70],
+        [525, 100],
+      ],
+      [
+        [650, 190],
+        [735, 270],
+        [745, 375],
+      ],
+      [
+        [650, 415],
+        [525, 410],
+        [450, 370],
+      ],
+      [
+        [445, 290],
+        [520, 280],
+        [625, 290],
+        [655, 310],
+      ],
+      [
+        [695, 260],
+        [560, 225],
+        [420, 210],
+      ],
+    ],
+    labels: [
+      [145, 100],
+      [450, 130],
+      [545, 50],
+      [790, 390],
+      [395, 385],
+      [610, 345],
+    ],
+    title: [345, 140],
+  },
+  southAfrica: {
+    routes: [
+      [[450, 395]],
+      [
+        [300, 400],
+        [130, 405],
+        [95, 355],
+      ],
+      [
+        [90, 270],
+        [120, 200],
+        [170, 190],
+      ],
+      [
+        [235, 250],
+        [290, 335],
+        [350, 310],
+      ],
+      [
+        [330, 270],
+        [235, 215],
+        [215, 140],
+        [245, 65],
+        [305, 55],
+      ],
+      [
+        [405, 95],
+        [455, 160],
+        [450, 285],
+        [485, 335],
+      ],
+      [
+        [555, 320],
+        [580, 230],
+        [595, 155],
+        [640, 110],
+        [695, 125],
+      ],
+      [
+        [665, 240],
+        [715, 300],
+        [725, 360],
+      ],
+      [
+        [660, 400],
+        [560, 395],
+        [450, 395],
+      ],
+    ],
+    labels: [
+      [50, 355],
+      [175, 145],
+      [380, 325],
+      [310, 105],
+      [480, 285],
+      [745, 100],
+      [780, 365],
+    ],
+    title: [340, 170],
+  },
+};
+for (const [id, spec] of Object.entries(expansionRoutes)) {
+  const nodes = spec.routes.flat();
+  // The last node is the first node repeated, closing the circuit.
+  const distinct = nodes.slice(0, -1);
+  let index = 0;
+  const curves = spec.routes.slice(1).map((route) =>
+    route.map(() => {
+      const a = distinct[index % distinct.length],
+        b = distinct[(index + 1) % distinct.length];
+      const prev = distinct[(index - 1 + distinct.length) % distinct.length],
+        after = distinct[(index + 2) % distinct.length];
+      index++;
+      return c(
+        a,
+        [a[0] + (b[0] - prev[0]) / 6, a[1] + (b[1] - prev[1]) / 6],
+        [b[0] - (after[0] - a[0]) / 6, b[1] - (after[1] - a[1]) / 6],
+        b,
+      );
+    }),
+  );
+  shapes[id] = { curves, labels: spec.labels, title: spec.title };
+}
 const round = (n: number) => +n.toFixed(3);
 const geometryCache = new WeakMap<Track, ReturnType<typeof createGeometry>>();
 function bezier([a, b, c, d]: Curve, t: number): Point {
@@ -238,7 +580,7 @@ export function compareCars(
   );
 }
 export function innerGuide(track: Track, g = geometry(track)) {
-  const positions = {
+  const positions: Partial<Record<Track["id"], number>> = {
     usa: 22,
     france: 55,
     britain: 24,
@@ -259,12 +601,13 @@ export function innerGuide(track: Track, g = geometry(track)) {
     segments
       .map((p) => p.map((v, i) => `${i ? "L" : "M"}${v.x} ${v.y}`).join(" "))
       .join(" ");
-  const offset = laneOffset(track, innerLane(track, positions[track.id]));
+  const marker = positions[track.id] ?? track.length / 2;
+  const offset = laneOffset(track, innerLane(track, marker));
   return {
     edgeSegments,
     edgePath: path(edgeSegments),
     lanePath: path(segments(1)),
-    target: g.point(positions[track.id], offset * 1.7),
-    label: g.point(positions[track.id], offset * 7.5),
+    target: g.point(marker, offset * 1.7),
+    label: g.point(marker, offset * 7.5),
   };
 }

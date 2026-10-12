@@ -1,4 +1,4 @@
-import type { Track } from "../lib/tracks";
+import { type Track } from "../lib/tracks";
 import {
   geometry,
   innerGuide,
@@ -63,6 +63,7 @@ export function Circuit({
   r?: { players: Car[]; laps: number; roads?: Road[] } | null;
   large?: boolean;
 }) {
+  const conditions = { ...r, trackId: track.id };
   const g = geometry(track);
   const { point, path, labels, title } = g;
   const inner = innerGuide(track, g);
@@ -76,7 +77,14 @@ export function Circuit({
   const legendKinds = (
     Object.keys(SECTOR_STYLES) as (keyof typeof SECTOR_STYLES)[]
   ).filter((kind) => effectRoads.some((road) => road.kind === kind));
-  const height = r?.roads?.length ? 510 : 475;
+  const hasTerrain = !!track.terrain?.length;
+  const height = hasTerrain
+    ? r?.roads?.length
+      ? 540
+      : 515
+    : r?.roads?.length
+      ? 510
+      : 475;
   return (
     <svg
       className={"circuit " + (large ? "large" : "")}
@@ -84,7 +92,7 @@ export function Circuit({
       role="img"
       aria-label={`${track.name}赛道，${track.length}格双车道，绿线逐格标明几何内侧，反向弯会换侧，同格时优先，弯道限速${track.corners
         .map((c) => {
-          const road = r && roadAt(r, c.at);
+          const road = r && roadAt(conditions, c.at);
           return (
             c.limit +
             (road?.kind === "limitUp" ? 1 : road?.kind === "limitDown" ? -1 : 0)
@@ -107,7 +115,7 @@ export function Circuit({
                 : "本场无路段效果标记"
             }`
           : ""
-      }`}
+      }${track.terrain?.length ? "。特殊地形按车位标出：" + [...new Set(track.terrain.map((t) => t.kind))].map((k) => ({ flooded: "青蓝积水，起始降挡额外付热量", tunnel: "深蓝隧道，禁止从手牌弃牌", gravel: "棕色碎石，补牌前付热量" })[k]).join("；") : ""}`}
     >
       <defs>
         <pattern
@@ -164,9 +172,39 @@ export function Circuit({
         strokeDasharray="8 8"
       />
       <path d={path} fill="none" stroke="#424d4b" strokeWidth="40" />
+      {track.chicanes?.map(([entry, exit]) => {
+        const points = Array.from({ length: (exit - entry) * 8 + 1 }, (_, i) =>
+          point(entry - 0.5 + i / 8),
+        );
+        return (
+          <path
+            key={entry}
+            d={points.map((p, i) => `${i ? "L" : "M"}${p.x} ${p.y}`).join(" ")}
+            fill="none"
+            stroke="#68bddd"
+            strokeWidth="47"
+            strokeDasharray="5 5"
+          >
+            <title>减速弯：两条弯道线分别检查；一个路况标记共用</title>
+          </path>
+        );
+      })}
+      {track.chicanes?.map(([entry, exit]) => (
+        <path
+          key={entry}
+          d={Array.from({ length: (exit - entry) * 8 + 1 }, (_, i) =>
+            point(entry - 0.5 + i / 8),
+          )
+            .map((p, i) => `${i ? "L" : "M"}${p.x} ${p.y}`)
+            .join(" ")}
+          fill="none"
+          stroke="#424d4b"
+          strokeWidth="40"
+        />
+      ))}
       {r?.roads &&
         Array.from({ length: track.length }, (_, i) => {
-          const road = sector(r, i, track);
+          const road = sector(conditions, i, track);
           if (!sectorStyle(road?.kind)) return null;
           const points = Array.from({ length: 5 }, (_, j) =>
             point(i - 0.5 + j / 4),
@@ -188,6 +226,56 @@ export function Circuit({
             />
           );
         })}
+      {track.terrain?.map((t) => {
+        const points = Array.from({ length: 5 }, (_, j) =>
+          point(t.at - 0.5 + j / 4, laneOffset(track, t.lane)),
+        );
+        const color = {
+          flooded: "#238faf",
+          tunnel: "#172a3c",
+          gravel: "#ba834e",
+        }[t.kind];
+        return (
+          <g
+            key={`${t.at}-${t.lane}`}
+            data-terrain-cell={t.at}
+            data-terrain-lane={t.lane}
+            data-terrain-kind={t.kind}
+          >
+            <title>{`${t.at} 格 ${t.lane === 0 ? "A" : "B"} 车道：${{ flooded: "积水 · 回合开始降挡额外付 1 热量", tunnel: "隧道 · 禁止从手牌弃牌", gravel: "碎石 · 补牌前付 1 热量（引擎为空时忽略）" }[t.kind]}`}</title>
+            <path
+              d={points
+                .map((p, j) => `${j ? "L" : "M"}${p.x} ${p.y}`)
+                .join(" ")}
+              stroke={color}
+              strokeWidth="18"
+              fill="none"
+            />
+            {t.kind === "gravel" ? (
+              <g fill="#efd2a0">
+                {[-4, 3].map((dx, i) => (
+                  <circle
+                    key={i}
+                    cx={points[2].x + dx}
+                    cy={points[2].y + i * 3 - 2}
+                    r="1.5"
+                  />
+                ))}
+              </g>
+            ) : (
+              <text
+                x={points[2].x}
+                y={points[2].y + 3}
+                textAnchor="middle"
+                fontSize="10"
+                fill={t.kind === "flooded" ? "#b4edfa" : "#aabdcf"}
+              >
+                {t.kind === "flooded" ? "≈" : "▥"}
+              </text>
+            )}
+          </g>
+        );
+      })}
       <path
         d={path}
         fill="none"
@@ -230,7 +318,7 @@ export function Circuit({
       </g>
       {r?.roads &&
         Array.from({ length: track.length }, (_, i) => {
-          const road = sector(r, i, track);
+          const road = sector(conditions, i, track);
           const style = sectorStyle(road?.kind);
           if (!road || !style) return null;
           const a = point(i - 0.5, -23),
@@ -252,7 +340,7 @@ export function Circuit({
         const a = point(c.at - 0.5, -21),
           b = point(c.at - 0.5, 21),
           label = labels[i];
-        const road = r && roadAt(r, c.at);
+        const road = r && roadAt(conditions, c.at);
         const limit =
           c.limit +
           (road?.kind === "limitUp" ? 1 : road?.kind === "limitDown" ? -1 : 0);
@@ -320,21 +408,31 @@ export function Circuit({
         y={title.y}
         textAnchor="middle"
         fill="#365a51"
-        fontSize={track.id === "britain" ? 19 : 26}
+        fontSize={
+          track.pack
+            ? track.english.length > 8
+              ? 18
+              : 22
+            : track.id === "britain"
+              ? 19
+              : 26
+        }
         fontWeight="800"
         letterSpacing="3"
       >
         {track.english}
       </text>
-      <text
-        x={title.x}
-        y={title.y + 24}
-        textAnchor="middle"
-        fill="#578074"
-        fontSize="12"
-      >
-        {track.name} · {track.length} 格 · {r?.laps || track.laps} 圈
-      </text>
+      {track.id !== "spain" && (
+        <text
+          x={title.x}
+          y={title.y + 24}
+          textAnchor="middle"
+          fill="#578074"
+          fontSize="12"
+        >
+          {track.name} · {track.length} 格 · {r?.laps || track.laps} 圈
+        </text>
+      )}
       {cars.map((p) => {
         const a = point(p.pos, laneOffset(track, p.lane));
         return (
@@ -425,8 +523,23 @@ export function Circuit({
           )}
         </g>
       ) : null}
+      {hasTerrain && (
+        <text
+          x="25"
+          y={height - 30}
+          fontSize="12"
+          fill="#345669"
+          fontWeight="700"
+        >
+          {track.id === "japan"
+            ? "≈ 青蓝积水：起始时降挡额外付 1 热量"
+            : track.id === "spain"
+              ? "▥ 深蓝隧道：不能从手牌弃牌；冷却／弃牌库可用"
+              : "· 棕色碎石车位：补牌前付 1 热量；引擎空时忽略"}
+        </text>
+      )}
       <text x="25" y={height - 10} fontSize="11" fill="#416f5a">
-        绿线＝几何内侧（同格优先，反向弯换侧） · 黄线＝弯线
+        绿线＝几何内侧（同格优先，反向弯换侧） · 黄线＝弯线 · 蓝边＝减速弯
       </text>
     </svg>
   );

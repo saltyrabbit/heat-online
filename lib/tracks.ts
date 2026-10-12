@@ -2,18 +2,38 @@
  * Last cell before the line = at - 1. Base boards: 6 Heat / 3 Stress.
  * Geometry is an original schematic redraw; facts are documented in README.
  */
-export type TrackId = "usa" | "france" | "britain" | "italy" | "coastline";
+import { EXPANSION_TRACKS } from "./expansion-tracks.ts";
+export type ExpansionPack = "heavyRain" | "tunnelVision" | "rockyRoads";
+export type TerrainKind = "flooded" | "tunnel" | "gravel";
+export type TrackId =
+  | "usa"
+  | "france"
+  | "britain"
+  | "italy"
+  | "coastline"
+  | "japan"
+  | "mexico"
+  | "spain"
+  | "netherlands"
+  | "germany"
+  | "southAfrica";
 export type Track = {
   id: TrackId;
   name: string;
   english: string;
   flag: string;
   official: boolean;
+  pack?: ExpansionPack;
+  engine?: number;
+  stress?: number;
+  chicanes?: readonly (readonly [number, number])[];
+  terrain?: readonly { at: number; lane: number; kind: TerrainKind }[];
   length: number;
   laps: number;
-  corners: { at: number; limit: number }[];
+  corners: readonly { at: number; limit: number }[];
 };
 export const TRACKS: Record<TrackId, Track> = {
+  ...EXPANSION_TRACKS,
   usa: {
     id: "usa",
     name: "美国",
@@ -98,4 +118,19 @@ export function isTrackId(id: unknown): id is TrackId {
 /** Rooms saved before map selection retain their original circuit. */
 export function getTrack(id?: string): Track {
   return TRACKS[isTrackId(id) ? id : "coastline"];
+}
+
+export const PACK_NAMES: Record<ExpansionPack, string> = {
+  heavyRain: "Heavy Rain",
+  tunnelVision: "Tunnel Vision",
+  rockyRoads: "Rocky Roads",
+};
+export function terrainAt(track: Track, pos: number, lane: number) {
+  const at = ((pos % track.length) + track.length) % track.length;
+  return track.terrain?.find((t) => t.at === at && t.lane === lane)?.kind;
+}
+export function roadCorners(track: Track) {
+  return track.corners.filter(
+    (c) => !track.chicanes?.some(([entry]) => entry === c.at),
+  );
 }

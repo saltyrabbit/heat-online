@@ -2,8 +2,8 @@
 // as browsers, never the server's deck or another seat's hand.
 import assert from "node:assert/strict";
 import { botChoice, cornerCost, cornerLimit } from "../lib/game.ts";
-import { upgrade, speedRange } from "../lib/modules.ts";
-import { getTrack } from "../lib/tracks.ts";
+import { upgrade, speedRange, modules, sectorEffect } from "../lib/modules.ts";
+import { getTrack, terrainAt } from "../lib/tracks.ts";
 const base = process.env.HEAT_TEST_URL || "http://127.0.0.1:5173/heat";
 const masks =
   process.env.HEAT_TEST_MASK !== undefined
@@ -33,11 +33,14 @@ for (const mask of masks) {
     assert.equal(res.status, 200);
     return res.json();
   };
-  const opts = {
+  const opts = modules({
     weather: !!(mask & 1),
     regular: !!(mask & 2),
     advanced: !!(mask & 4),
-  };
+    ...(process.env.HEAT_TEST_PACKS
+      ? { heavyRain: true, tunnelVision: true, rockyRoads: true }
+      : {}),
+  });
   const created = await call(0, {
     action: "create",
     name: "扩展网络 A",
@@ -125,19 +128,27 @@ for (const mask of masks) {
           corner = corners.find(
             (c) => c.at > p.pos && c.at < track.length * r.laps,
           );
-        const cards = p.hand
-          .filter(
-            (c) =>
-              c.type === "speed" &&
-              ((c.value === 0 && !c.upgrade) ||
-                (!p.engine &&
-                  corner &&
-                  corner.at - p.pos <= speedRange(c)[0] &&
-                  speedRange(c)[0] >
-                    cornerLimit(r, { played: [] }, corner.at, corner.limit) &&
-                  !upgrade(c)?.effects.cool)),
-          )
-          .map((c) => c.id);
+        const cards =
+          terrainAt(track, p.pos, p.lane) === "tunnel"
+            ? []
+            : p.hand
+                .filter(
+                  (c) =>
+                    c.type === "speed" &&
+                    ((c.value === 0 && !c.upgrade) ||
+                      (!p.engine &&
+                        corner &&
+                        corner.at - p.pos <= speedRange(c)[0] &&
+                        speedRange(c)[0] >
+                          cornerLimit(
+                            r,
+                            { played: [] },
+                            corner.at,
+                            corner.limit,
+                          ) &&
+                        !upgrade(c)?.effects.cool)),
+                )
+                .map((c) => c.id);
         body = { action: "react", kind: "finish", cards };
       } else if (r.turn.step === "reveal") {
         const variables = p.played.filter((c) => upgrade(c)?.speed.length > 1);
@@ -164,6 +175,20 @@ for (const mask of masks) {
           options: { values: choices[0] },
         };
         exercised.add("values");
+      } else if (r.turn.step === "slip") {
+        const distance = r.slipDistances
+          .filter(
+            (n) =>
+              cornerCost(r, p, r.turn.speed, r.turn.start, p.pos + n) <=
+              p.engine,
+          )
+          .at(-1);
+        body = {
+          action: "react",
+          kind: distance ? "slip" : "check",
+          options: { distance },
+        };
+        exercised.add("extraSlip");
       } else if (r.turn.cool && p.hand.some((c) => c.type === "heat")) {
         body = { action: "react", kind: "cool" };
         exercised.add("cool");
@@ -171,6 +196,7 @@ for (const mask of masks) {
         const canUse = (c, k) => !r.turn.effects?.[c.id]?.used.includes(k);
         const reduce = p.played.find(
           (c) =>
+            terrainAt(getTrack(r.trackId), p.pos, p.lane) !== "tunnel" &&
             upgrade(c)?.effects.reduce &&
             canUse(c, "reduce") &&
             p.hand.some((x) => x.type === "stress"),
@@ -200,7 +226,37 @@ for (const mask of masks) {
               (upgrade(c).effects.heat || 0) <=
               p.engine,
         );
-        if (reduce)
+        const superCool = p.played.find(
+          (c) =>
+            upgrade(c)?.effects.superCool &&
+            canUse(c, "superCool") &&
+            r.turn.cool >= 0,
+        );
+        const move = r.draftMoves
+          ?.filter(
+            (m) =>
+              cornerCost(
+                r,
+                p,
+                r.turn.speed,
+                r.turn.start,
+                p.pos + m.distance,
+              ) <= p.engine,
+          )
+          .sort((a, b) => b.distance - a.distance)[0];
+        if (
+          superCool &&
+          sectorEffect(r, p.pos, getTrack(r.trackId)) !== "noCool"
+        )
+          body = {
+            action: "react",
+            kind: "effect",
+            options: { cardId: superCool.id, effect: "superCool" },
+          };
+        else if (move) {
+          body = { action: "react", kind: "draftMove", options: move };
+          exercised.add("draftMove");
+        } else if (reduce)
           body = {
             action: "react",
             kind: "effect",

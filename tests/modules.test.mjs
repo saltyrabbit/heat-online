@@ -109,7 +109,7 @@ test("all 8 module combinations are independent and legacy rooms default off", (
         advanced: !!(mask & 4),
       },
       r = setup(opts);
-    assert.deepEqual(r.modules, opts);
+    assert.deepEqual(r.modules, { ...DEFAULT_MODULES, ...opts });
     assert.equal(!!r.weather, opts.weather);
     assert.equal(r.phase, opts.regular || opts.advanced ? "draft" : "plan");
   }
@@ -120,7 +120,7 @@ test("all 8 module combinations are independent and legacy rooms default off", (
   assert.throws(() => modules({ championship: true }));
 });
 test("official card sets: regular 1–17 twice, advanced 18–48 twice, mixed 96; card-sheet corrections retained", () => {
-  assert.equal(UPGRADES.length, 48);
+  assert.equal(UPGRADES.filter((u) => !u.pack).length, 48);
   for (const [opts, count, min, max] of [
     [{ regular: true }, 34, 1, 17],
     [{ advanced: true }, 62, 18, 48],

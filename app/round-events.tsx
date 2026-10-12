@@ -138,6 +138,7 @@ function driverStatus(room: EventRoom, player: Driver) {
     locked: "已锁定选牌",
     discard: "收尾中",
     react: "行动中",
+    slip: "连续尾流",
     waiting: "等待行动",
     done: "本回合已结束",
     lobby: "已就位",

@@ -1,14 +1,25 @@
-/** Base-box modules. Numbers/icons transcribed from the official licensed BGA
+import { getTrack, type ExpansionPack } from "./tracks.ts";
+/** HEAT modules and expansion upgrades. Numbers/icons transcribed from the official licensed BGA
  * card sheets, checked against Days of Wonder Advanced Rules v1.1.
  * https://cdn.svc.asmodee.net/production-daysofwonder/uploads/2025/03/9101-HT-RulesAdvanced-EN_compressed.pdf
  * https://x.boardgamearena.net/data/themereleases/261007-0930/games/heat/261007-1450/img/upgrade-cards.jpg
  * https://x.boardgamearena.net/data/themereleases/261007-0930/games/heat/261007-1450/img/weather-cards.jpg
  */
-export type Modules = { weather: boolean; regular: boolean; advanced: boolean };
+export type Modules = {
+  weather: boolean;
+  regular: boolean;
+  advanced: boolean;
+  heavyRain?: boolean;
+  tunnelVision?: boolean;
+  rockyRoads?: boolean;
+};
 export const DEFAULT_MODULES: Modules = {
   weather: false,
   regular: false,
   advanced: false,
+  heavyRain: false,
+  tunnelVision: false,
+  rockyRoads: false,
 };
 export function modules(value?: unknown): Modules {
   if (value === undefined) return { ...DEFAULT_MODULES };
@@ -17,7 +28,15 @@ export function modules(value?: unknown): Modules {
   const v = value as Record<string, unknown>;
   if (
     Object.keys(v).some(
-      (k) => !["weather", "regular", "advanced"].includes(k),
+      (k) =>
+        ![
+          "weather",
+          "regular",
+          "advanced",
+          "heavyRain",
+          "tunnelVision",
+          "rockyRoads",
+        ].includes(k),
     ) ||
     Object.values(v).some((x) => typeof x !== "boolean")
   )
@@ -25,6 +44,9 @@ export function modules(value?: unknown): Modules {
   return { ...DEFAULT_MODULES, ...v } as Modules;
 }
 export type Effects = {
+  superCool?: number;
+  draft?: number;
+  extraSlip?: number;
   cool?: number;
   slip?: number;
   reduce?: number;
@@ -40,6 +62,7 @@ export type Upgrade = {
   number: number;
   name: string;
   advanced: boolean;
+  pack?: ExpansionPack;
   speed: number[];
   plus: number;
   heatCard?: boolean;
@@ -94,6 +117,24 @@ const rows: [string, number[], number, Effects, boolean?][] = [
   ["尾翼", [6], 0, { heat: 2, limit: 3 }],
   ["四轮驱动", [0], 1, { accelerate: true }],
   ["额外热量", [0], 0, {}, true],
+  ["进气口", [1], 0, { superCool: 1, salvage: 4, limit: -1 }],
+  ["进气口", [0], 0, { superCool: 1, slip: 1, reduce: 1 }],
+  ["进气口", [1], 0, { superCool: 1, cool: 1, scrap: 1 }],
+  ["进气口", [3], 0, { superCool: 1, scrap: 3 }],
+  ["进气口", [4], 0, { superCool: 1, scrap: 4 }],
+  ["进气口", [0], 1, { superCool: 1, refresh: true, limit: -1 }],
+  ["前翼", [0], 1, { draft: 3 }],
+  ["前翼", [0], 0, { draft: 1, direct: true, refresh: true }],
+  ["前翼", [2], 0, { draft: 2, salvage: 2, scrap: 5 }],
+  ["前翼", [3], 0, { draft: 1, limit: 1, scrap: 3 }],
+  ["前翼", [4], 0, { draft: 1, refresh: true, scrap: 4 }],
+  ["前翼", [6], 0, { draft: 2, heat: 1 }],
+  ["滑动裙板", [0], 1, { extraSlip: 1, limit: 1, reduce: 1 }],
+  ["滑动裙板", [1], 0, { extraSlip: 1, slip: 1 }],
+  ["滑动裙板", [1], 0, { extraSlip: 1, refresh: true }],
+  ["滑动裙板", [2], 0, { extraSlip: 1, direct: true }],
+  ["滑动裙板", [2, 3], 0, { extraSlip: 1 }],
+  ["滑动裙板", [4, 6], 0, { extraSlip: 1, heat: 1 }],
 ];
 export const UPGRADES: Upgrade[] = rows.map(
   ([name, speed, plus, effects, heatCard], i) => ({
@@ -104,6 +145,14 @@ export const UPGRADES: Upgrade[] = rows.map(
     effects,
     heatCard,
     advanced: i >= 17,
+    pack:
+      i >= 60
+        ? "rockyRoads"
+        : i >= 54
+          ? "tunnelVision"
+          : i >= 48
+            ? "heavyRain"
+            : undefined,
   }),
 );
 export function upgrade(c: { upgrade?: number }): Upgrade | undefined {
@@ -122,6 +171,9 @@ export function speedRange(c: {
       : [c.value, c.value];
 }
 export const EFFECT_LABELS: Record<keyof Effects, string> = {
+  superCool: "💧 超级冷却",
+  draft: "↟ 牵引",
+  extraSlip: "⇉ 连续尾流",
   cool: "❄ 冷却",
   slip: "⇢ 尾流+",
   reduce: "↧ 减压",
@@ -137,6 +189,9 @@ export function effectLines(u: Upgrade) {
   return Object.entries(u.effects).map(([k, v]) => {
     const n = v as number;
     const text = {
+      superCool: `超级冷却：至多 ${n} 张弃牌热量回到引擎区`,
+      draft: `牵引：至多 ${n} 格，沿途空格、落在另一车后`,
+      extraSlip: `尾流后可再尾流 ${n} 次（每次需重新满足条件）`,
       cool: `冷却：至多 ${n} 张手牌热量回到引擎区`,
       slip: `尾流额外 ${n} 格`,
       reduce: `减压：弃掉至多 ${n} 张手牌压力`,
@@ -151,7 +206,7 @@ export function effectLines(u: Upgrade) {
     const timing =
       k === "limit"
         ? "第 7 步 · 自动"
-        : k === "slip"
+        : ["slip", "extraSlip"].includes(k)
           ? "第 6 步 · 可选"
           : ["heat", "scrap"].includes(k)
             ? "第 5 步 · 必须"
@@ -282,25 +337,52 @@ export const ROAD_ICONS: Record<RoadKind, string> = {
   freeBoost: "✚",
   weather: "☁",
 };
-export function roadAt(r: { roads?: Road[] }, at: number) {
-  return r.roads?.find((x) => x.at === at);
+export function roadAt(r: { roads?: Road[]; trackId?: string }, at: number) {
+  const direct = r.roads?.find((x) => x.at === at);
+  if (direct) return direct;
+  const exit = getTrack((r as { trackId?: string }).trackId).chicanes?.find(
+    ([entry]) => entry === at,
+  )?.[1];
+  const shared =
+    exit === undefined ? undefined : r.roads?.find((x) => x.at === exit);
+  return shared && ["limitUp", "limitDown", "overheat"].includes(shared.kind)
+    ? shared
+    : undefined;
 }
 export function sector(
   r: { roads?: Road[]; trackId?: string },
   pos: number,
-  track: { length: number; corners: { at: number }[] },
+  track: {
+    length: number;
+    corners: readonly { at: number }[];
+    chicanes?: readonly (readonly [number, number])[];
+  },
 ) {
   const cell = ((pos % track.length) + track.length) % track.length;
+  const sectorCorners = track.corners;
   const corner =
-    [...track.corners].reverse().find((c) => c.at <= cell) ||
-    track.corners.at(-1)!;
+    [...sectorCorners].reverse().find((c) => c.at <= cell) ||
+    sectorCorners.at(-1)!;
   return roadAt(r, corner.at);
 }
 export function sectorEffect(
   r: { roads?: Road[]; weather?: Weather; trackId?: string },
   pos: number,
-  track: { length: number; corners: { at: number }[] },
+  track: {
+    length: number;
+    corners: readonly { at: number }[];
+    chicanes?: readonly (readonly [number, number])[];
+  },
 ) {
   const road = sector(r, pos, track);
   return road?.kind === "weather" ? r.weather?.effect : road?.kind;
+}
+
+export function maxCars(settings?: Modules) {
+  return (
+    6 +
+    Number(!!settings?.heavyRain) +
+    Number(!!settings?.tunnelVision) +
+    Number(!!settings?.rockyRoads)
+  );
 }

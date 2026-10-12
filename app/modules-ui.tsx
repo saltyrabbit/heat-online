@@ -18,12 +18,20 @@ import {
   type Road,
   type Effects,
 } from "../lib/modules";
-import { getTrack, type TrackId } from "../lib/tracks";
+import {
+  getTrack,
+  PACK_NAMES,
+  terrainAt,
+  type ExpansionPack,
+  type TrackId,
+} from "../lib/tracks";
 export function ModuleOptions({
   value = DEFAULT_MODULES,
   disabled = false,
   onChange,
+  requiredPack,
 }: {
+  requiredPack?: ExpansionPack;
   value?: Modules;
   disabled?: boolean;
   onChange: (v: Modules) => void;
@@ -35,13 +43,33 @@ export function ModuleOptions({
         [
           ["weather", "天气与路况", "6 种天气 · 随机弯道和路段效果"],
           ["regular", "车库：普通升级", "34 张普通升级牌 · 开赛前选 3 张"],
-          ["advanced", "车库：高级升级", "62 张高级升级牌 · 可独立或混合开启"],
+          [
+            "advanced",
+            "车库：高级升级",
+            "62 张基础盒高级升级牌 · 加入已开启扩展的升级",
+          ],
+          [
+            "heavyRain",
+            "Heavy Rain · 大雨",
+            "日本／墨西哥 · 积水与超级冷却 · +1 车手",
+          ],
+          [
+            "tunnelVision",
+            "Tunnel Vision · 隧道视野",
+            "西班牙／荷兰 · 隧道与牵引 · +1 车手",
+          ],
+          [
+            "rockyRoads",
+            "Rocky Roads · 崎岖道路",
+            "南非／德国 · 碎石与连续尾流 · +1 车手",
+          ],
         ] as const
       ).map(([key, label, note]) => (
         <label key={key}>
           <input
             type="checkbox"
-            checked={value[key]}
+            checked={!!value[key] || requiredPack === key}
+            disabled={requiredPack === key}
             onChange={(e) => onChange({ ...value, [key]: e.target.checked })}
           />
           <span>
@@ -50,7 +78,11 @@ export function ModuleOptions({
           </span>
         </label>
       ))}
-      <p>车库关闭时使用起始升级。普通与高级同时开启时混合选牌。</p>
+      <p>
+        所选赛道对应的扩展自动开启；切换赛道后可关闭。每个扩展加入 12
+        张高级升级，需同时开启“高级升级”才会进入车库。三盒可混用，最多 9
+        位车手；车库关闭时使用起始升级。
+      </p>
     </fieldset>
   );
 }
@@ -206,6 +238,7 @@ export function UpgradeHelp({ card }: { card: Card }) {
 type Driver = {
   id: string;
   name: string;
+  lane: number;
   upgrades?: Card[];
   pos: number;
   hand: Card[];
@@ -217,6 +250,7 @@ type Driver = {
 type ModuleRoom = {
   phase: string;
   me: string;
+  draftMoves?: { cardIds: string[]; distance: number }[];
   modules?: Modules;
   trackId?: TrackId;
   weather?: Weather;
@@ -235,7 +269,10 @@ export function RaceConditions({ room }: { room: ModuleRoom }) {
   if (
     !room.modules?.weather &&
     !room.modules?.regular &&
-    !room.modules?.advanced
+    !room.modules?.advanced &&
+    !room.modules?.heavyRain &&
+    !room.modules?.tunnelVision &&
+    !room.modules?.rockyRoads
   )
     return null;
   const w = room.weather,
@@ -252,6 +289,9 @@ export function RaceConditions({ room }: { room: ModuleRoom }) {
             room.modules?.regular ? "普通升级" : "",
             room.modules?.advanced ? "高级升级" : "",
             room.modules?.weather ? "天气与路况" : "",
+            room.modules?.heavyRain ? "Heavy Rain" : "",
+            room.modules?.tunnelVision ? "Tunnel Vision" : "",
+            room.modules?.rockyRoads ? "Rocky Roads" : "",
           ]
             .filter(Boolean)
             .join(" · ")}
@@ -268,7 +308,10 @@ export function RaceConditions({ room }: { room: ModuleRoom }) {
           </div>
           <div className="roadGrid">
             {(room.roads || []).map((road, i) => {
-              const end = room.roads![(i + 1) % room.roads!.length].at;
+              const index = track.corners.findIndex((c) => c.at === road.at);
+              const end = track.corners[(index + 1) % track.corners.length].at;
+              const pair = track.chicanes?.find(([, exit]) => exit === road.at);
+              const number = index + 1;
               const isSector = ["slip", "freeBoost", "weather"].includes(
                 road.kind,
               );
@@ -280,7 +323,12 @@ export function RaceConditions({ room }: { room: ModuleRoom }) {
                   }
                 >
                   <strong>
-                    {ROAD_ICONS[road.kind]} {i + 1} 号
+                    {ROAD_ICONS[road.kind]}{" "}
+                    {pair &&
+                    !["slip", "freeBoost", "weather"].includes(road.kind)
+                      ? `${track.corners.findIndex((c) => c.at === pair[0]) + 1}–${number}`
+                      : number}{" "}
+                    号
                     {road.kind === "weather"
                       ? "天气路段"
                       : isSector
@@ -296,7 +344,9 @@ export function RaceConditions({ room }: { room: ModuleRoom }) {
                   <small>
                     {isSector
                       ? `从 ${road.at} 格起，至 ${end} 格弯道线前（可跨起终点）`
-                      : `${road.at} 格弯道线`}
+                      : pair
+                        ? `${pair[0]}、${pair[1]} 格两条弯道线共用`
+                        : `${road.at} 格弯道线`}
                   </small>
                 </div>
               );
@@ -505,6 +555,7 @@ export function UpgradeActions({
     reduce: (n) => `弃掉至多 ${n} 张手牌压力`,
     salvage: (n) => `选至多 ${n} 张弃牌洗入抽牌堆`,
     refresh: () => "补牌前将此牌放回牌顶",
+    superCool: (n) => `至多 ${n} 张弃牌热量回到引擎区`,
     accelerate: () => `启用＋奖励 · 现在速度 +${t.plus || 0}`,
   };
   const action = (id: string, effect: keyof Effects, n?: number) => {
@@ -545,7 +596,13 @@ export function UpgradeActions({
                     disabled={
                       busy ||
                       state?.used.includes(k) ||
-                      (k === "heat" && p.engine < (v as number))
+                      (k === "heat" && p.engine < (v as number)) ||
+                      (k === "reduce" &&
+                        terrainAt(getTrack(room.trackId), p.pos, p.lane) ===
+                          "tunnel") ||
+                      (k === "superCool" &&
+                        sectorEffect(room, p.pos, getTrack(room.trackId)) ===
+                          "noCool")
                     }
                     onClick={() =>
                       action(c.id, k as keyof Effects, v as number)
@@ -570,6 +627,37 @@ export function UpgradeActions({
           </div>
         );
       })}
+      {!!room.draftMoves?.length && (
+        <div className="directPlays">
+          <h4>牵引 · 第 5 步</h4>
+          <p>
+            沿途两车位全空，落点紧跟另一辆车；不增加速度，可以跨终点。用完后仍可尾流。
+          </p>
+          <div className="actionButtons">
+            {room.draftMoves.map((m, i) => (
+              <button
+                className="outline"
+                key={i}
+                disabled={busy}
+                onClick={() => act("draftMove", m)}
+              >
+                牵引 +{m.distance} 格{" "}
+                <small>
+                  {m.cardIds
+                    .map(
+                      (id) => "#" + p.played.find((c) => c.id === id)?.upgrade,
+                    )
+                    .join(" + ")}
+                </small>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+      {relevant.some((c) => upgrade(c)?.effects.draft) &&
+        !room.draftMoves?.length && (
+          <p>当前没有可用牵引落点：必须沿途全空并停在另一辆车后一格。</p>
+        )}
       {direct.length > 0 && (
         <div className="directPlays">
           <h4>反应阶段，可从手牌额外打出以下牌</h4>
@@ -585,7 +673,7 @@ export function UpgradeActions({
                 title={effectText(upgrade(c)!)}
                 onClick={() => act("direct", { cardId: c.id })}
               >
-                ↗ #{c.upgrade} 油门踏板 · +{upgrade(c)!.speed[0]}
+                ↗ #{c.upgrade} {upgrade(c)!.name} · +{upgrade(c)!.speed[0]}
                 <small>{effectText(upgrade(c)!)}</small>
               </button>
             ))}
@@ -651,6 +739,58 @@ export function UpgradeActions({
       <p>
         冷却使用上方“冷却一次”按钮；尾流奖励在尾流时选择；个人限速自动计入弯道检查。保留牌按点击顺序从牌顶开始抽取。
       </p>
+    </section>
+  );
+}
+
+export function TrackRules({
+  trackId,
+  player,
+}: {
+  trackId?: TrackId;
+  player?: Pick<Driver, "pos" | "lane">;
+}) {
+  const t = getTrack(trackId),
+    terrain = player && terrainAt(t, player.pos, player.lane);
+  if (!t.pack) return null;
+  return (
+    <section className="trackRules">
+      <h3>{PACK_NAMES[t.pack]} · 赛道规则</h3>
+      <p>
+        {t.name} · {t.engine} 张引擎热量 · {t.stress} 张压力 · 正式赛 {t.laps}{" "}
+        圈
+      </p>
+      {t.id === "japan" && (
+        <p>
+          ≈ 积水：第 1 步开始时在积水上，降挡额外付 1 热量（降一挡付
+          1；降两挡共付 2）。保持或升挡不付积水费用。
+        </p>
+      )}
+      {t.id === "spain" && (
+        <p>
+          ▥ 隧道：停车位置在隧道内时，禁止减压与第 8
+          步从手牌弃牌。冷却、超级冷却与弃抽牌堆仍可用；第 9
+          步照常弃置本轮已出牌。
+        </p>
+      )}
+      {t.id === "southAfrica" && (
+        <p>
+          · 碎石：第 9
+          步本轮已出牌弃置后、补牌前，若停在棕色碎石车位且引擎还有热量，支付 1
+          张；引擎为空时忽略。按停车车道判断。
+        </p>
+      )}
+      {!!t.chicanes?.length && (
+        <p>
+          蓝边减速弯：两条同限速弯道线，经过时各检查一次。天气与路况开启后共抽一个标记：限速／超速费用同时作用两条线；路段效果只从出口后开始，减速弯两条线之间没有路段修正。
+        </p>
+      )}
+      {terrain && (
+        <strong>
+          你当前停在
+          {{ flooded: "积水", tunnel: "隧道", gravel: "碎石" }[terrain]}上
+        </strong>
+      )}
     </section>
   );
 }

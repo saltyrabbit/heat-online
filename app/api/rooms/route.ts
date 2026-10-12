@@ -1,6 +1,8 @@
+import { maxCars } from "../../../lib/modules";
 import { getRoomDatabase } from "@/db/room-store";
 import {
   room,
+  COLORS,
   configure,
   player,
   start,
@@ -126,16 +128,9 @@ export async function POST(req: Request) {
       if (!p) {
         if (r.phase !== "lobby")
           throw new Error("比赛已开始，只有原车手可以重新连接");
-        if (r.players.length >= 6) throw new Error("房间已满");
+        if (r.players.length >= maxCars(r.modules)) throw new Error("房间已满");
         const used = new Set(r.players.map((p) => p.color));
-        const i = [
-          "#ef573f",
-          "#50a9e8",
-          "#f0c34b",
-          "#53b99b",
-          "#b28ae2",
-          "#ef92b5",
-        ].findIndex((c) => !used.has(c));
+        const i = COLORS.findIndex((c) => !used.has(c));
         p = player(String(b.name || "车手"), sid, i);
         r.players.push(p);
       }
@@ -151,17 +146,12 @@ export async function POST(req: Request) {
       if (b.action === "configure") configure(r, b.trackId, b.laps, b.modules);
       else if (b.action === "start") start(r);
       else if (b.action === "bot") {
-        if (r.phase !== "lobby" || r.players.length >= 6)
-          throw new Error("只能在大厅添加电脑，最多六人");
+        if (r.phase !== "lobby" || r.players.length >= maxCars(r.modules))
+          throw new Error(
+            `只能在大厅添加电脑，当前上限 ${maxCars(r.modules)} 人`,
+          );
         const used = new Set(r.players.map((p) => p.color));
-        const i = [
-          "#ef573f",
-          "#50a9e8",
-          "#f0c34b",
-          "#53b99b",
-          "#b28ae2",
-          "#ef92b5",
-        ].findIndex((c) => !used.has(c));
+        const i = COLORS.findIndex((c) => !used.has(c));
         r.players.push(
           player(
             `电脑 ${r.players.filter((p) => p.bot).length + 1}`,
